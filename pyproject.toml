@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hma-memory"
+version = "0.1.0"
+description = "Hybrid Memory Architecture: a zero-dependency MCP server for AI long-term memory (AM body + thin CEMA index). Model-agnostic."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+keywords = ["mcp", "memory", "llm", "ai-agent", "long-term-memory", "rag", "agentic"]
+authors = [{ name = "HMA contributors" }]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# 刻意零运行时依赖：仅用 Python 标准库。
+# PDF 重排（scripts/pdf_reflow.py）是可选功能，需 PyMuPDF：
+#   pip install -e ".[pdf]"
+dependencies = []
+
+[project.optional-dependencies]
+pdf = ["PyMuPDF"]
+
+[project.urls]
+# 待发布时补充
+
+[project.scripts]
+hma-mcp = "hma.server:main"
+hma = "hma.cli:main"
+
+[tool.setuptools]
+packages = ["hma", "hma.engine", "hma.engine.handlers"]

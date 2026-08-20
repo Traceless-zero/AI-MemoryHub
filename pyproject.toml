@@ -24,6 +24,14 @@ dependencies = []
 
 [project.optional-dependencies]
 pdf = ["PyMuPDF"]
+# 端到端生成式评测（locomo_bench.py / locomo_two_phase.py 的 LLM 作答路径）需 openai：
+#   pip install -e ".[llm]"
+# 注意：系统 python 默认无 openai，脚本 try/except 兜底会静默退化为 dry-run；
+#       请用已装 openai 的 managed venv 运行。
+llm = ["openai>=1.0"]
+# 官方口径打分（locomo_score_official.py）需 nltk（Porter Stemmer，与官方 100% 一致）；
+# 未装时回退内联纯 Python Porter（可能有极少数边角差异）。
+eval = ["nltk"]
 
 [project.urls]
 # 待发布时补充

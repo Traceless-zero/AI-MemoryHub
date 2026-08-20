@@ -55,7 +55,7 @@ def build_prompt(existing, text):
         "{\n"
         '  "packages": [\n'
         '    {"id": "kebab-case-唯一-id", "title": "标题", '
-        '"summary": "一句话摘要(<=30字)", "tags": ["标签"], '
+        '"summary": "2~4句自包含真概要", "tags": ["标签"], '
         '"aliases": ["别名/同义词"], "body": "# 标题\\n\\n markdown 正文"}\n'
         "  ],\n"
         '  "links": [["id-a", "id-b"], ...]\n'

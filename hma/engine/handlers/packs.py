@@ -13,7 +13,7 @@ import os
 
 from ..registry import register
 from ...hma_core import Memory
-from ..anchor_derive import derive_anchors
+from ...hma_core import derive_anchors
 
 
 def _resolve_root(root, base_dir):

@@ -7,10 +7,10 @@
     python -m hma.engine query_anchors <root> <q>  # L2 章级检索
     python -m hma.engine install/uninstall <pkg>   # 装卸记忆包索引
     python -m hma.engine rebuild-all <root>    # 全量重建索引 + 目录树
-    python -m hma.engine tree <root>           # 生成目录结构树
-    python -m hma.engine 日志 add/show/range   # 单日记录包
+    python -m hma.engine tree <root>           # 生成目录结构树（已停用）
 
 记忆直接落 `memory/`（单一权威存储），不再经 sources/ 中间格式。
+daylog 由 scripts/core/daylog_append.py 机械追加（单 daylog 路线，详见 daylog设计.md）。
 """
 
 import os
@@ -20,7 +20,7 @@ import argparse
 from . import handlers  # noqa: F401  触发 handler 自注册
 from .registry import dispatch, available_modes
 from ..hma_core import Memory
-from .anchor_derive import derive_anchors, merge_anchors
+from ..hma_core import derive_anchors, merge_anchors
 
 
 def repo_root():
@@ -151,95 +151,20 @@ def _cmd_uninstall(a):
 
 
 def _cmd_rebuild_all(a):
-    """遍历仓库根下所有包，全量重建统一索引，并再生目录结构树。"""
+    """遍历仓库根下所有包，全量重建统一索引（不再生成目录结构树）。"""
     mem = Memory(a.root)
     try:
         n = mem.rebuild_all()
-        try:
-            from ..tree import build_tree
-            tp = build_tree(a.root)
-            print("tree ->", tp)
-        except Exception as e:
-            print("[tree] 生成失败（已忽略）: %s" % e)
     finally:
         mem.close()
     print("rebuild-all -> %d 条索引（仓库根 %s）" % (n, mem.repo))
 
 
 def _cmd_tree(a):
-    """生成 memory/ 目录结构树.md（派生缓存，只到包层级）。"""
-    try:
-        from ..tree import build_tree
-        p = build_tree(a.root)
-        print("tree ->", p)
-    except Exception as e:
-        print("[tree] 生成失败（已忽略）: %s" % e)
+    """目录结构树生成已停用（派生缓存，等同 index.db，无需常驻）。"""
+    print("[tree] 目录结构树.md 生成已停用（见 SCHEMA 约定）")
 
 
-# ---------------------------------------------------------------------------
-# daylog：单日记录包（时间轴索引层）
-# ---------------------------------------------------------------------------
-def _default_daylog_root():
-    return os.path.join(repo_root(), "memory", "日志")
-
-
-def _render_day(d, pkg, beats=None):
-    """渲染某天的叙事：模糊型列全部段，精准型列命中段。"""
-    from ..daylog import parse_beats
-    if beats is None:
-        beats = parse_beats(pkg.body) if pkg else []
-    print("[%s] 单日记录 · 共 %d 段叙事" % (d, len(beats)))
-    for i, b in enumerate(beats, 1):
-        print("  %d. %s" % (i, b["text"]))
-    if pkg and (pkg.linked or pkg.tags):
-        print("")
-        print("  > 索引 · linked: [%s] · tags: [%s]"
-              % (", ".join(pkg.linked), ", ".join(pkg.tags)))
-
-
-def _cmd_daylog_add(a):
-    from ..daylog import append_beat
-    rid, n = append_beat(
-        a.root or _default_daylog_root(),
-        text=a.text, linked=a.linked, tags=a.tags, date_str=a.date,
-    )
-    print("已追加叙事 → %s（当日共 %d 段）" % (rid, n))
-
-
-def _cmd_daylog_show(a):
-    from ..daylog import read_day, filter_beats
-    root = a.root or _default_daylog_root()
-    pkg = read_day(root, a.date)
-    if not pkg:
-        print("(那天没有单日记录：%s)" % a.date)
-        return
-    beats = filter_beats(pkg, a.q) if a.q else None
-    if a.q and not beats:
-        print("[%s] 无叙事命中 %r" % (a.date, a.q))
-        return
-    _render_day(a.date, pkg, beats)
-
-
-def _cmd_daylog_range(a):
-    from ..daylog import days_in_range, read_day, filter_beats
-    root = a.root or _default_daylog_root()
-    days = days_in_range(root, a.start, a.end)
-    if not days:
-        print("(区间内没有单日记录)")
-        return
-    any_out = False
-    for d, _rid, _title in days:
-        pkg = read_day(root, d)
-        if not pkg:
-            continue
-        beats = filter_beats(pkg, a.q) if a.q else None
-        if a.q and not beats:
-            continue
-        _render_day(d, pkg, beats)
-        print()
-        any_out = True
-    if a.q and not any_out:
-        print("(区间内无叙事命中 %r)" % a.q)
 
 
 def build_parser():
@@ -294,40 +219,17 @@ def build_parser():
     au.set_defaults(func=_cmd_uninstall)
 
     ar = sub.add_parser("rebuild-all",
-                        help="遍历仓库根下所有包，全量重建统一索引 + 目录结构树")
+                        help="遍历仓库根下所有包，全量重建统一索引（不再生成目录结构树）")
     ar.add_argument("--root", default="memory",
                     help="仓库根目录（含 index.db 的 memory，默认 memory）")
     ar.set_defaults(func=_cmd_rebuild_all)
 
     t = sub.add_parser("tree",
-                        help="生成 memory/ 目录结构树.md（派生缓存，只到包层级）")
+                        help="目录结构树生成已停用（派生缓存，等同 index.db）")
     t.add_argument("--root", default="memory",
                     help="仓库根目录（含 memory 的目录，默认 memory）")
     t.set_defaults(func=_cmd_tree)
 
-    dl = sub.add_parser("日志", help="单日记录包（时间轴索引层）")
-    dls = dl.add_subparsers(dest="daylog_cmd", required=True)
-
-    da = dls.add_parser("add", help="追加一段叙事（收录即写）")
-    da.add_argument("text", help="一段叙事：这天发生的一件事/进展，像写日记")
-    da.add_argument("--linked", help="该段链接的主题包 id（逗号分隔）")
-    da.add_argument("--tags", help="该段关键词 tag（逗号分隔）")
-    da.add_argument("--date", help="归属日期 YYYY-MM-DD（缺省今天）")
-    da.add_argument("--root", help="daylog 落库目录（缺省 memory/日志）")
-    da.set_defaults(func=_cmd_daylog_add)
-
-    ds = dls.add_parser("show", help="看某天：全天模糊型 / 配 --q 精准搜寻型")
-    ds.add_argument("date", help="日期 YYYY-MM-DD")
-    ds.add_argument("--q", help="叙事段关键词过滤（精准搜寻型）")
-    ds.add_argument("--root", help="daylog 落库目录（缺省 memory/日志）")
-    ds.set_defaults(func=_cmd_daylog_show)
-
-    dr = dls.add_parser("range", help="看一段日子（日历序，时间只是过滤键）")
-    dr.add_argument("--start", help="起始日期 YYYY-MM-DD（可省）")
-    dr.add_argument("--end", help="结束日期 YYYY-MM-DD（可省）")
-    dr.add_argument("--q", help="包内话题关键词过滤（可省）")
-    dr.add_argument("--root", help="daylog 落库目录（缺省 memory/日志）")
-    dr.set_defaults(func=_cmd_daylog_range)
     return p
 
 

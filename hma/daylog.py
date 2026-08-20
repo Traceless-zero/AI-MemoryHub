@@ -1,50 +1,29 @@
 # -*- coding: utf-8 -*-
 """daylog —— 单日记录包（时间轴索引层，叙事型）。
 
-CEMA 主记忆库按「主题而非时间线」组织（设计文档 §4.4），夜间归档把话题
-溶进主题事件包后，「那一天发生了什么」的时间线索随之丢失。本模块补上
-这条正交的时间轴，且不违反 §4.4：
+单 daylog 路线（daylog设计.md）：一天一个文件 memory/日志/daylog-YYYY-MM-DD.md，
+AI 只 append 一条 beat（标题 + touched + linked + tags + 正文），不做任何「归到
+哪个项目/模块」的路由判断。语义召回由 AIMH 跨所有 .md 扫锚点完成，与「写在哪」
+无关；daylog 仅作时间序跳转入口。
 
-    单日记录包只存「一天的叙事 + 关联 ID 链接 + 关键词 tag」，
-    是只读时间索引；权威叙事永远在主题事件包（活文档）里。
-
-借鉴 WB 自带 memory 的收录结构 —— **叙事块 + 结构化侧车**：
-    正文 = 这一天按时间顺序流动的叙事（像写日记，可回读的故事）；
-    结构化字段（linked / tags / front-matter）只作机器索引侧车，不破坏可读性。
-
-数据模型（复用现有 EventPackage 原语，零新 schema）：
-    id      = daylog-YYYY-MM-DD（一天一包，id 内嵌日期 → 日期即键）
-    body    = 一段连贯叙事：每个「进展」一个段落，段尾跟 `<!--beat ...-->`
-              侧车注释（存该段的 linked / tags）；包末附一句索引 blockquote
-    linked  = 当天所有进展链接到的主题包 id 并集（front-matter）
-    tags    = 当天所有进展关键词并集（front-matter，并兼作锚点）
-    anchors = 由 tags 构造（确定性，使单日包可被 query_anchors 发现）
-
-无状态铁律（§13）合规性：
-    时间只作 WHERE 过滤键（id 前缀字符串比较，确定性、可复现），
-    结果按日历序排列（客观时间顺序，非热度/新鲜度相关性权重）。
-
-两种唤起：
-    全天模糊型「我那天都干了些什么」 → read_day / days_in_range 列全部叙事
-    精准搜寻型「那天我是不是让你干了 XXX」 → filter_beats 在叙事段内
-    做确定性关键词匹配（命中后经 linked 一对一映射调主题包正文，§2.3）
+本模块是引擎侧 daylog 读写助手，供 context compaction / 周期梳理等子系统调用
+（scripts/core/compact.py、scripts/core/periodic_review.py）。写入严格走 FM-V2：
+   person/location/topic 为 {规范名:[变体]} 字典；event_date 为归属日期；
+   pkage_created/pkage_updated 取代 created/updated；anchors 仅 {Chapter,about,keywords}；
+   不写 aliases / features / locator；title 由文件名机械派生（==daylog-YYYY-MM-DD，AI 不传入，写入工具自动填充）。
 """
-
+import os
 import re
 from datetime import date
 
 from .hma_core import Memory
 
-DAY_PREFIX = "daylog-"
+DAY_PREFIX = "日志/daylog-"
 
-# 段侧车注释：<!--beat linked:cema-design,hma tags:CEMA,HMA-->
 _BEAT_RE = re.compile(r"<!--\s*beat\s*(.*?)\s*-->", re.S)
-_META_KV = re.compile(r"(\w+)\s*:\s*([^<]*)")
+_META_KV = re.compile(r"(\w+)\s*:\s*([^<]*?)(?=\s+\w+:|$)")
 
 
-# ---------------------------------------------------------------------------
-# 基础工具
-# ---------------------------------------------------------------------------
 def ensure_date(s):
     """校验并规范化 YYYY-MM-DD；非法则抛 ValueError。"""
     return date.fromisoformat(str(s).strip()).isoformat()
@@ -87,13 +66,15 @@ def _clean_prose(s):
 
 
 def _parse_beat_meta(s):
-    linked, tags = [], []
+    linked, tags, btype = [], [], "event"
     for k, v in _META_KV.findall(s or ""):
         if k == "linked":
             linked = _split_csv(v)
         elif k == "tags":
             tags = _split_csv(v)
-    return {"linked": linked, "tags": tags}
+        elif k == "type":
+            btype = v.strip() or "event"
+    return {"linked": linked, "tags": tags, "type": btype}
 
 
 def _index_blockquote(linked, tags):
@@ -101,19 +82,28 @@ def _index_blockquote(linked, tags):
             % (", ".join(linked), ", ".join(tags)))
 
 
+def _strip_index(body):
+    """去掉包末的索引 blockquote（追加新段前清理）。"""
+    lines = (body or "").splitlines()
+    while lines and lines[-1].strip().startswith("> 索引"):
+        lines.pop()
+    return "\n".join(lines)
+
+
 # ---------------------------------------------------------------------------
-# 写入：追加一段叙事（收录即写）
+# 写入：追加一段叙事（FM-V2 合规）
 # ---------------------------------------------------------------------------
 def append_beat(root, text, linked=None, tags=None,
-                date_str=None, trigger="daylog.append"):
-    """向某天的单日记录包追加一段叙事。
+                date_str=None, beat_type="event", trigger="daylog.append"):
+    """向某天的单日记录包追加一段叙事（FM-V2 合规写入）。
 
-    root      daylog 专用落库目录（如 memory/日志）
-    text      一段叙事（必填）：描述这天发生的一件事 / 一个进展，
-              像写日记，可用「先是 / 随后 / 最后 / 接着」等连接词让一天连贯。
-    linked    该段链接到的主题事件包 id（列表或逗号分隔串）
+    root      仓库记忆根（如 memory；daylog 包位于 memory/日志/，
+              id 命名空间为 日志/daylog-YYYY-MM-DD，由 path 派生）
+    text      一段叙事（必填）：描述这天发生的一件事 / 一个进展
+    linked    该段链接到的主题包 id（列表或逗号分隔串）
     tags      该段关键词 tag（列表或逗号分隔串）
     date_str  归属日期 YYYY-MM-DD；缺省今天
+    beat_type 段类型：'event'（收录/大事件，默认）| 'query'（用户查询观测）
 
     返回 (rid, n_beats)。
     """
@@ -124,7 +114,7 @@ def append_beat(root, text, linked=None, tags=None,
     rid = day_id(d)
     linked = _split_csv(linked)
     tags = _split_csv(tags)
-    meta = "linked:%s tags:%s" % (",".join(linked), ",".join(tags))
+    meta = "type:%s linked:%s tags:%s" % (beat_type, ",".join(linked), ",".join(tags))
     beat_block = "%s\n<!--beat %s-->" % (text, meta)
 
     mem = Memory(root)
@@ -135,40 +125,35 @@ def append_beat(root, text, linked=None, tags=None,
             new_body = body.rstrip() + "\n\n" + beat_block
             all_linked = _dedup(pkg.linked + linked)
             all_tags = _dedup(pkg.tags + tags)
-            created = pkg.created
+            pk_created = pkg.created          # 已有包：保留原收录日期
         else:
-            head = "# %s 单日记录" % d
+            head = "# %s 工作日志" % d
             new_body = head + "\n\n" + beat_block
-            all_linked, all_tags, created = linked, tags, d
+            all_linked, all_tags = linked, tags
+            pk_created = d                     # 新包：收录日期 = 归属日
         n = len(parse_beats(new_body))
         full_body = new_body.rstrip() + "\n\n" + _index_blockquote(
             all_linked, all_tags) + "\n"
-        anchors = [{"title": t, "locator": t, "summary": "", "tags": []}
-                   for t in all_tags]
+        # FM-V2 写入：四要素字典 + event_date + pkage_*；title 由文件名(id 的 basename)机械派生，AI 不传入；不写 aliases/locator
         mem.write(
             id=rid,
-            title="%s 单日记录" % d,
+            title=os.path.basename(rid),          # == daylog-YYYY-MM-DD，与磁盘文件名严格一致（单一真相源）
             summary="%s 共 %d 段叙事" % (d, n),
-            aliases=[d],
             tags=all_tags,
             linked=all_linked,
+            person=[{"用户": ["我", "用户本人"]}],
+            event_date=d,
+            location=[],
+            topic=[],
             body=full_body,
-            created=created,
-            updated=date.today().isoformat(),
-            anchors=anchors,
+            anchors=[],                        # 不含 locator；rebuild 时可派生
+            pkage_created=pk_created,
+            pkage_updated=date.today().isoformat(),
             trigger=trigger,
         )
     finally:
         mem.close()
     return rid, n
-
-
-def _strip_index(body):
-    """去掉包末的索引 blockquote（追加新段前清理）。"""
-    lines = (body or "").splitlines()
-    while lines and lines[-1].strip().startswith("> 索引"):
-        lines.pop()
-    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -188,6 +173,10 @@ def days_in_range(root, start=None, end=None):
 
     返回 [(date_str, rid, title), ...]。start/end 任一可省（开区间端）。
     日期比较 = id 后缀字符串比较（ISO 日期字典序即时间序，确定性）。
+
+    注意：`mem.list_all()` 返回的 rid 是 basename（如 daylog-2026-08-13），
+    与 read 用的 path-derived id（日志/daylog-2026-08-13）不一致；此处按
+    basename 判 `daylog-` 前缀，日期从 basename 后缀抽取。
     """
     start = ensure_date(start) if start else None
     end = ensure_date(end) if end else None
@@ -196,11 +185,13 @@ def days_in_range(root, start=None, end=None):
         rows = mem.list_all()
     finally:
         mem.close()
-    out = []
+    base_prefix = os.path.basename(DAY_PREFIX)   # "daylog-"
+    out, seen_d = [], set()
     for rid, title, _tags, _updated in rows:
-        if not rid.startswith(DAY_PREFIX):
+        base = os.path.basename(rid)
+        if not base.startswith(base_prefix):
             continue
-        d = rid[len(DAY_PREFIX):]
+        d = base[len(base_prefix):]
         try:
             d = ensure_date(d)
         except ValueError:
@@ -209,6 +200,11 @@ def days_in_range(root, start=None, end=None):
             continue
         if end and d > end:
             continue
+        # 同一天物理文件可能因 package_id 不一致（'日志' vs ''）在
+        # 索引里出现两行 → 同一日只应出现一次（时间轴索引层语义）。
+        if d in seen_d:
+            continue
+        seen_d.add(d)
         out.append((d, rid, title))
     out.sort()  # 日历序（客观时间顺序，非相关性权重）
     return out

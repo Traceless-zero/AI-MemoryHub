@@ -32,17 +32,33 @@ HMA_TOOLS_OPENAI = [
         "type": "function",
         "function": {
             "name": "memory_write",
-            "description": "写/改一个事件包（记忆）。id 存在则覆盖。",
+            "description": (
+                "写/改一个事件包：原子写 .md（权威源）+ 确定性 upsert 索引。"
+                "id 为相对 memory/ 的复合路径（不含 .md）；id 存在则覆盖更新。"
+                "四要素 person/location/topic 为 {规范名:[变体]} 字典（别名/代号进变体数组，"
+                "无独立 aliases/features）；anchors 仅 {Chapter,about,keywords}；时间用 "
+                "pkage_created/pkage_updated，事件时间用 event_date。"
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "id": {"type": "string"},
-                    "title": {"type": "string"},
-                    "summary": {"type": "string"},
-                    "aliases": {"type": "array", "items": {"type": "string"}},
-                    "tags": {"type": "array", "items": {"type": "string"}},
-                    "linked": {"type": "array", "items": {"type": "string"}},
-                    "body": {"type": "string"},
+                    "id": {"type": "string", "description": "事件包复合 ID（相对 memory/ 的路径，不含 .md）；包身份由路径派生"},
+                    "title": {"type": "string", "description": "标题"},
+                    "summary": {"type": "string", "description": "2~4句自包含真概要（不写'已废弃/已移除'等元备注）"},
+                    "tags": {"type": "array", "items": {"type": "string"}, "description": "分类标签数组（不放实体名）"},
+                    "linked": {"type": "array", "items": {"type": "string"}, "description": "关联包复合 id（含目录+.md）"},
+                    "body": {"type": "string", "description": "Markdown 正文"},
+                    "pkage_created": {"type": "string", "description": "收录时间 YYYY-MM-DD（可选；不传默认今天）"},
+                    "pkage_updated": {"type": "string", "description": "更新时间 YYYY-MM-DD（可选；不传默认今天）"},
+                    "person": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}, "description": "参与方 {规范全名:[别名/代号/同义词]}；如 {'维罗妮卡·夏·雪莱':['午夜魅影','PR-7']}"},
+                    "anchors": {"type": "array", "items": {"type": "object", "properties": {
+                        "Chapter": {"type": "string", "description": "章节/小节标题（正文定位键，对标 ## 标题）"},
+                        "about": {"type": "string", "description": "该节要点梗概（参与锚点匹配、可直答\"这章讲什么\"）"},
+                        "keywords": {"type": "array", "items": {"type": "string"}, "description": "章级关键词（5维：时间/地点/关键事件/锚定物品/人物 各≥1）"},
+                    }}, "description": "C+A 对象锚点列表 {Chapter,about,keywords}；不传则由引擎按 ## 派生"},
+                    "event_date": {"type": "string", "description": "事件时间：YYYY-MM-DD / YYYY-YYYY / '—'（无时间信息）"},
+                    "location": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}, "description": "地点 {规范名:[变体]}"},
+                    "topic": {"type": "object", "additionalProperties": {"type": "array", "items": {"type": "string"}}, "description": "主题 {规范名:[变体]}（变体里纯日期=事件发生时间）"},
                 },
                 "required": ["id"],
             },
@@ -58,6 +74,10 @@ HMA_TOOLS_OPENAI = [
                 "properties": {
                     "q": {"type": "string"},
                     "top_k": {"type": "integer"},
+                    "keywords": {
+                        "type": "array", "items": {"type": "string"},
+                        "description": "AI 理解层解析出的复合实体词（如 ['量子计算','最新进展']）；传入即启用 corpus_missing_entity 硬拒答闸",
+                    },
                 },
                 "required": ["q"],
             },

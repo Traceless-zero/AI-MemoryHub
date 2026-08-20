@@ -4,7 +4,9 @@ HMA 命令行接口 —— 对应 MCP 工具接口：
 
 用法：
   python -m hma.cli --root <dir> write  --id X --title T --summary S \
-          --tags a,b --aliases "x,y" --linked A,B --body "..."
+          --tags a,b --aliases "x,y" --linked A,B \
+          --person "P1,P2" --anchors '[...]' --event-date 2026-08-11 \
+          --body "..."
   python -m hma.cli --root <dir> query  "关键词" --top-k 5
   python -m hma.cli --root <dir> link   A B
   python -m hma.cli --root <dir> rebuild
@@ -25,7 +27,46 @@ def _split(s):
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
+def _parse_json(s, name):
+    if not s:
+        return None
+    try:
+        return json.loads(s)
+    except Exception as e:
+        raise SystemExit(f"[hma.cli] --{name} 须为合法 JSON：{e}")
+
+
 def cmd_write(args):
+    # —— AI 侧「填模板 dict → check_kw → render_fm 确定性写回」全链路入口 ——
+    # 优先走 --fm-dict（JSON 文件）：AI 只产 front-matter dict，validate_fm 校验
+    # （结构 + 四要素变体语义 + 锚点 keywords 双通道 5 维契约），通过后 render_fm
+    # 借 EventPackage 序列化写回（正文不丢）。校验不过 → 拒绝落库（fail-closed）。
+    if args.fm_dict:
+        from hma.fm_schema import validate_fm, render_fm
+        with open(args.fm_dict, "r", encoding="utf-8") as f:
+            d = json.load(f)
+        errs = validate_fm(d, memory_root=args.root if args.fm_cross_pkg else None)
+        if errs:
+            for e in errs:
+                print(e)
+            print("[fm_schema] 校验未通过，未写入。")
+            sys.exit(1)
+        body = args.body or ""
+        if args.body_file:
+            with open(args.body_file, "r", encoding="utf-8") as f:
+                body = f.read()
+        ok, md, errs2 = render_fm(d, body, filepath=args.out)
+        if not ok:
+            for e in errs2:
+                print(e)
+            print("[fm_schema] render 失败，未写入。")
+            sys.exit(1)
+        out = args.out or os.path.join(args.root, f"{d.get('id') or args.id}.md")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        with open(out, "w", encoding="utf-8") as f:
+            f.write(md)
+        print(f"written (fm-dict): {out}")
+        return
     m = Memory(args.root)
     body = args.body
     if args.body_file:
@@ -33,13 +74,54 @@ def cmd_write(args):
             body = f.read()
     if not body and not sys.stdin.isatty():
         body = sys.stdin.read()
-    path = m.write(
+    # 兜底（R-safety）：body 缺省/空且现有文件有非空正文 → 自动回填现有正文，
+    # 避免「只改 FM」的更新把既有正文清空（与 MCP memory_write 同策略）。
+    # 新建（无现有文件）仍允许空 body；显式清空需直接调 Memory.write(force_empty_body=True)。
+    if not body:
+        existing = m.read_body(args.id)
+        if existing:
+            body = existing
+    anchors = _parse_json(args.anchors, "anchors")        # C+A 锚点列表 JSON
+    features = _parse_json(args.features, "features")     # 实体/属性特征 JSON
+    # 平铺路径可选轻校验（--fm-check）：结构级 validate_fm（不含跨包污染语义，
+    # 因平铺入参无法表达 list[dict] 四要素形态，只查必填/类型/anchors 双通道）。
+    if args.fm_check:
+        from hma.fm_schema import validate_fm
+        d = {
+            "title": args.title or args.id,
+            "summary": args.summary or "",
+            "tags": _split(args.tags),
+            "linked": _split(args.linked),
+            "person": _parse_json(args.person, "person") if args.person and args.person.strip().startswith("[") else [],
+            "location": _parse_json(args.location, "location") if args.location and args.location.strip().startswith("[") else [],
+            "topic": _parse_json(args.topic, "topic") if args.topic and args.topic.strip().startswith("[") else [],
+            "event_date": args.event_date or "—",
+            "anchors": anchors or [],
+        }
+        errs = validate_fm(d, memory_root=None)
+        if errs:
+            for e in errs:
+                print(e)
+            print("[fm_schema] 校验未通过，未写入。")
+            sys.exit(1)
+    result = m.write(
         id=args.id, title=args.title or args.id,
         summary=args.summary or "",
         aliases=_split(args.aliases), tags=_split(args.tags),
         linked=_split(args.linked), body=body or "",
+        person=_split(args.person) or None,
+        location=_split(args.location) or None,
+        topic=_split(args.topic) or None,
+        event_date=args.event_date or None,
+        anchors=anchors, features=features,
+        integrity_check=args.integrity_check,
     )
-    print(f"written: {path}")
+    if args.integrity_check:
+        # 写入侧反推：result 为 {"path":..., "warnings":[...]}；
+        # warnings 非空 = 刚落库的实体缺独有弧段，需反推用户补独有关键词
+        print(json.dumps(result, ensure_ascii=False))
+    else:
+        print(f"written: {result}")
 
 
 def cmd_query(args):
@@ -113,8 +195,24 @@ def build_parser():
     w.add_argument("--tags", default="")
     w.add_argument("--aliases", default="")
     w.add_argument("--linked", default="")
+    w.add_argument("--person", default="", help="参与方/人物（逗号分隔；对话记录用）")
+    w.add_argument("--location", default="", help="地点（逗号分隔）")
+    w.add_argument("--topic", default="", help="主题词（逗号分隔）")
+    w.add_argument("--event-date", default="", help="事件日期 YYYY-MM-DD")
+    w.add_argument("--anchors", default="",
+                   help="C+A 锚点列表 JSON 数组，如 '[{\"Chapter\":\"对话原文\",\"about\":\"…\",\"tags\":[\"…\"],\"locator\":\"对话原文\"}]'")
+    w.add_argument("--features", default="", help="实体/属性特征 JSON 对象")
     w.add_argument("--body", default="")
     w.add_argument("--body-file", default="")
+    w.add_argument("--integrity-check", action="store_true",
+                   help="写入侧反推：以 JSON 返回 {path, warnings}；warnings 非空=刚落库实体缺独有弧段")
+    w.add_argument("--fm-dict", default="",
+                   help="AI 侧 front-matter dict（JSON 文件）入口：validate_fm 校验（含 anchors 5 维双通道）→ render_fm 确定性写回；校验不过拒绝落库")
+    w.add_argument("--fm-check", action="store_true",
+                   help="平铺参数路径可选轻校验：结构级 validate_fm（必填/类型/anchors 双通道），不过拒绝落库")
+    w.add_argument("--fm-cross-pkg", action="store_true",
+                   help="--fm-dict 时启用跨包污染语义规则（需 index.db，较慢）")
+    w.add_argument("--out", default="", help="--fm-dict 时指定输出 .md 路径（默认 <root>/<id>.md）")
     w.set_defaults(func=cmd_write)
 
     q = sub.add_parser("query", help="确定性检索")

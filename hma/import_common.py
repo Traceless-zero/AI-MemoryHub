@@ -25,7 +25,7 @@ import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from hma.hma_core import Memory
-from hma.engine.anchor_derive import derive_anchors
+from hma.hma_core import derive_anchors
 
 
 def _lead_line(body, limit=80):

@@ -21,22 +21,22 @@ R49 设计翻转：废弃 `external/` 隔离命名空间，改为把原客户端
 
 | 客户端 | 原生记忆位置 | 适配器脚本 |
 |---|---|---|
-| WorkBuddy | 项目级 `.workbuddy/memory/2026-*.md` | `scripts/migrate_wb_memory.py`（wb-only） |
-| Claude Code | `~/.claude/projects/<hash>/memory/`（MEMORY.md + 主题文件 + 同级 CLAUDE.md） | `scripts/migrate_claude_memory.py`（claude-only） |
-| Gemini CLI | `~/.gemini/GEMINI.md`（save_memory 追加的「## Gemini Added Memories」） | `scripts/migrate_gemini_memory.py`（gemini-only） |
-| Codex | `~/.codex/memories/`（MEMORY.md + rollout_summaries/ + skills/ + memories_extensions/） | `scripts/migrate_codex_memory.py`（codex-only） |
+| WorkBuddy | 项目级 `.workbuddy/memory/2026-*.md` | `scripts/core/migrate_wb_memory.py`（wb-only） |
+| Claude Code | `~/.claude/projects/<hash>/memory/`（MEMORY.md + 主题文件 + 同级 CLAUDE.md） | `scripts/core/migrate_claude_memory.py`（claude-only） |
+| Gemini CLI | `~/.gemini/GEMINI.md`（save_memory 追加的「## Gemini Added Memories」） | `scripts/core/migrate_gemini_memory.py`（gemini-only） |
+| Codex | `~/.codex/memories/`（MEMORY.md + rollout_summaries/ + skills/ + memories_extensions/） | `scripts/core/migrate_codex_memory.py`（codex-only） |
 | 其他（Cursor 等云端记忆暂不适配） | 各自原生记忆目录 | 照既有适配器同构新增 `migrate_<client>_memory.py` |
 
 AI 先判定客户端（看 cwd 属于哪个客户端项目、或问用户），再跑对应适配器。所有适配器同构：读客户端原生 `.md` → 全量原文、按内容归类进规范命名空间（`User/` `Project/` `Other/` …）的 HMA 事件包（落库原语 `hma/import_common.write_imported` + 细粒度 `python -m hma.import_entry` CLI）→ 统一前台 db 自动接住（`package_id` = `<namespace>/<client>` 路径推出）。
 
 ## WB 适配器（wb-only，已有，成熟）
-详见脚本 `scripts/migrate_wb_memory.py`：读 `.workbuddy/memory/2026-*.md` → 确定性重排（轮次→H2）→ 写 `hma-design-journal` 包事件 `dev`。设计铁律同 R38：全量原文、检索主轴=第N轮（Round 29 合规）、时间=WHERE 过滤键。
+详见脚本 `scripts/core/migrate_wb_memory.py`：读 `.workbuddy/memory/2026-*.md` → 确定性重排（轮次→H2）→ 写 `AIMH-design-journal` 包事件 `dev`。设计铁律同 R38：全量原文、检索主轴=第N轮（Round 29 合规）、时间=WHERE 过滤键。
 
 ## Claude Code 适配器（claude-only，已有）
-`scripts/migrate_claude_memory.py`（cwd = 仓库根）：
+`scripts/core/migrate_claude_memory.py`（cwd = 仓库根）：
 
 ```bash
-python scripts/migrate_claude_memory.py \
+python scripts/core/migrate_claude_memory.py \
     [--projects-dir ~/.claude/projects] \
     [--root memory --namespace Other] \
     [--only memory,debugging]   # 只导指定文件名 stem，默认全导
@@ -47,10 +47,10 @@ python scripts/migrate_claude_memory.py \
 - 锚点由 `derive_anchors` 自动派生；统一前台 db 自动接住。
 
 ## Gemini CLI 适配器（gemini-only，新增）
-`scripts/migrate_gemini_memory.py`（cwd = 仓库根）：
+`scripts/core/migrate_gemini_memory.py`（cwd = 仓库根）：
 
 ```bash
-python scripts/migrate_gemini_memory.py \
+python scripts/core/migrate_gemini_memory.py \
     [--gemini-dir ~/.gemini] \
     [--memory-file GEMINI.md] \
     [--root memory --namespace Other] \
@@ -62,10 +62,10 @@ python scripts/migrate_gemini_memory.py \
 - 默认只导全局记忆文件（长期记忆层）；项目级 `./GEMINI.md` 属「项目指令」不导，避免把规则当记忆污染。
 
 ## Codex 适配器（codex-only，新增）
-`scripts/migrate_codex_memory.py`（cwd = 仓库根）：
+`scripts/core/migrate_codex_memory.py`（cwd = 仓库根）：
 
 ```bash
-python scripts/migrate_codex_memory.py \
+python scripts/core/migrate_codex_memory.py \
     [--codex-dir ~/.codex] \
     [--root memory --namespace Other] \
     [--only memory,2026-04-15-refactor-auth]
@@ -96,14 +96,14 @@ python scripts/migrate_codex_memory.py \
 1. **全量原文灌入**：内容逐字保留，只确定性重排标题层级，不增删、不"总结改写"。
 2. **AI 只理解、脚本确定性写**：本技能只做"判定客户端 + 确认归属包"，重排 / 落库 / 索引交适配器脚本。
 3. **无状态检索铁律（§13）不破**：时间是 WHERE 过滤键，不是排序权重。
-4. **不另立冗余包**：WB 开发日志归入既有 `Project/hma-design-journal`（事件 `dev`）；Claude / Gemini / Codex 等外部记忆按内容归类落 `<namespace>/<client>` 包（User/项目/Other，由 AI 判定），每条带 `src:<client>` + `imported` 标签与 `> 来源:` 溯源行；与 HMA 原生主题包互补，不把原文再抄一份进设计包。
+4. **不另立冗余包**：WB 开发日志归入既有 `Project/AIMH-design-journal`（事件 `dev`）；Claude / Gemini / Codex 等外部记忆按内容归类落 `<namespace>/<client>` 包（User/项目/Other，由 AI 判定），每条带 `src:<client>` + `imported` 标签与 `> 来源:` 溯源行；与 HMA 原生主题包互补，不把原文再抄一份进设计包。
 5. **范围 = 仅客户端「长期记忆」类 markdown**；客户端的项目指令 / 规则文件（CLAUDE.md / AGENTS.md / 项目级 GEMINI.md）若与 HMA 现有包重叠，另行处理（不盲目复制）。
-6. **内容摘要取首条非标题内容行**（适配器 `_lead_line`）：HMA 的 L1 `query()` 只匹配 id/title/summary/aliases/tags，不搜正文；若 summary 落到 markdown 标题行则几乎不可召回。故摘要取真正内容首行（如 "My preferred programming language is Python."），让 save_memory / Memories 的关键事实可被关键词命中。
+6. **内容摘要取首条非标题内容行**（适配器 `_lead_line`）：HMA 的 L1 `query()` 只匹配 id/title/summary/tags + 四要素 person/topic/location，不搜正文；若 summary 落到 markdown 标题行则几乎不可召回。故摘要取真正内容首行（如 "My preferred programming language is Python."），让 save_memory / Memories 的关键事实可被关键词命中。
 
 ## 验证（两种唤起都该命中）
 ```bash
-# L1 包级（id/title/summary/aliases/tags 命中；正文不搜）
-python -m hma.engine query memory/项目/hma-design-journal "项目开发日志"   # WB
+# L1 包级（id/title/summary/tags + 四要素 person/topic/location 命中；正文不搜）
+python -m hma.engine query memory/项目/AIMH-design-journal "项目开发日志"   # WB
 python -m hma.engine query memory/其他/claude-<hash> "XX"            # Claude（或 User/Project）
 python -m hma.engine query memory/其他/gemini "python"              # Gemini
 python -m hma.engine query memory/其他/codex "pytest"               # Codex
@@ -117,5 +117,5 @@ python -m hma.engine derive memory/其他/gemini
 ## 纪律
 - 只**读**客户端原生记忆文件（不修改它们）。落库只用对应 `scripts/migrate_*_memory.py`（或细粒度 `python -m hma.import_entry`）+ 共享原语 `hma/import_common.write_imported`；不要手写 `memory/` 事件 `.md`。
 - 不手改 `memory/` 下的索引。
-- 双副本：本技能存于 user 级 `~/.workbuddy/skills/` 与项目 `hma/skills/`，随开源。
+- 双副本：本技能存于 user 级 `~/.workbuddy/skills/` 与项目 `skills/`，随开源。
 - 这是**通用化**技能：新增客户端 = 加一个同构适配器脚本，不改核心管线。

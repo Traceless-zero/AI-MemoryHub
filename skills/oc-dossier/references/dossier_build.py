@@ -6,15 +6,15 @@
 输入：一份「已结构化」的 dossier markdown（硬数据卡 + 分节），
       即 oc_classify 判定为 structured 的来源。
 输出：memory/原创角色/<id>/ 下的（事件 .md 直接置于包目录，R50 移除 events/）
-      - <id>-base   （必有且仅 1 个：硬数据卡 + 形象 + 行事调性(+短背景)）
-      - <id>-origin （铁律②：背景/人生经历「超长」才分立为故事包）
+      - <id>-base   （必有且仅 1 个：硬数据卡 + 形象 + 行事调性）
+      - <id>-origin （铁律②：背景故事包，默认必有，无论长短独立成包）
       - <id>-ext    （铁律③：能力/事件/关系合并为 1 个拓展包）
 
 切片规则（忠实于 oc-dossier 三层铁律）：
   · 数据卡（首个 `##` 之前的内容）永远进基础包。
   · 形象 / 性格 / 信条 / 行事调性 / 语气 → 基础包。
-  · 背景 / 人生经历 / 来历 / 身世 → 短则并入基础包；
-    纯文本超过 ORIGIN_LONG(600) 字才分立为故事包。
+  · 背景 / 人生经历 / 来历 / 身世 → 默认独立成 origin 包（无论长短）；
+    仅当该 OC 确实无任何背景故事时省略 origin 包。
   · 能力 / 装备 / 参与事件 / 人物关系 → 合并进 1 个拓展包，
     原 `###` 子标题保留为段落，供 invoke 惰性召回。
 
@@ -33,19 +33,22 @@ import sys
 import argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-# 技能位于 hma/skills/oc-dossier/references/，上溯 3 级即 hma/
+# 技能位于 skills/oc-dossier/references/，上溯 3 级即 hma/
 _HMA_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
-if os.path.isdir(os.path.join(_HMA_ROOT, "hma")) and _HMA_ROOT not in sys.path:
-    sys.path.insert(0, _HMA_ROOT)
+for _cand in (_HMA_ROOT, os.getcwd()):
+    if os.path.isdir(os.path.join(_cand, "hma")) and _cand not in sys.path:
+        sys.path.insert(0, _cand)
 
 from hma.hma_core import Memory  # noqa: E402
 
-ORIGIN_LONG = 600  # 背景超过此字数才分立故事包
+# origin 包：背景故事无论长短独立成包；无背景故事时才省略（见 build 逻辑）
 
 BASE_PERSONA_KW = ["形象", "外貌", "相貌", "外表", "外观",
                     "性格", "信条", "行事准则", "行事风格",
-                    "语言调性", "语言风格", "人格", "性情", "语气"]
-ORIGIN_KW = ["背景故事", "背景", "人生经历", "生平", "来历", "身世", "经历", "传记"]
+                    "语言调性", "语言风格", "人格", "性情", "语气",
+                    "档案", "核心档案", "身份卡", "数据卡"]
+ORIGIN_KW = ["背景故事", "背景", "人生经历", "生平", "来历", "身世", "经历", "传记",
+             "起源", "史诗", "来历", "前史", "出身", "阶段", "编年", "年表"]
 EXT_KW = ["能力装备", "能力", "装备", "技能", "武装", "功法", "异能", "武器",
           "参与事件", "重大事件", "战绩", "事迹",
           "人物关系", "关系", "相关人物", "羁绊", "交际", "人际关系"]
@@ -117,19 +120,34 @@ def build(source, char_id, name=None, root=None):
     disp = name or _find_name(data_card, sections, char_id)
 
     base_parts, origin_parts, ext_parts = [data_card], [], []
-    for title, body in sections:
+
+    def _block(title, body):
+        return "## %s\n\n%s" % (title, body) if body else "## %s" % title
+
+    # 连续 origin 段合并为一组（修复"父标题孤儿"bug）：
+    # 形如 `## 起源史诗`（正文为空）紧接 `## 第一阶段`…`## 第五阶段`
+    # 时，若逐段分散落点，空正文的父标题与其子女段可能分置不同包，
+    # 导致父标题进了 base、故事内容丢了父标题。改为把连续 origin 段
+    # 合成一组，父标题与其子女段始终同进同出（整组统一落 origin 包）。
+    i, n = 0, len(sections)
+    while i < n:
+        title, body = sections[i]
         kind = _classify_section(title)
-        block = "## %s\n\n%s" % (title, body) if body else "## %s" % title
-        if kind == "base":
-            base_parts.append(block)
-        elif kind == "origin":
-            # 短背景并入基础包；超长分立故事包
-            if len(body) <= ORIGIN_LONG:
-                base_parts.append(block)
-            else:
-                origin_parts.append(block)
-        else:  # ext
-            ext_parts.append(block)
+        if kind == "origin":
+            group = [(title, body)]
+            j = i + 1
+            while j < n and _classify_section(sections[j][0]) == "origin":
+                group.append(sections[j])
+                j += 1
+            total = sum(len(b) for _, b in group)
+            dest = origin_parts  # origin 包：无论长短独立成包
+            for gt, gb in group:
+                dest.append(_block(gt, gb))
+            i = j
+        else:
+            block = _block(title, body)
+            (base_parts if kind == "base" else ext_parts).append(block)
+            i += 1
 
     base_body = "\n\n".join(p for p in base_parts if p.strip()) + "\n"
     packs = []
@@ -139,19 +157,20 @@ def build(source, char_id, name=None, root=None):
     m_root = root or os.path.join("memory", "原创角色", char_id)
     mem = Memory(m_root)
     mem.write(char_id + "-base", base_title,
-              "基础包：硬数据卡 + 形象 + 行事调性（+短背景）。扮演最小可运行单元。",
-              aliases=[disp, char_id],
+              "基础包：硬数据卡 + 形象 + 行事调性。扮演最小可运行单元。",
+              person={disp: [char_id]},
               tags=["oc", "角色档案", "基础包", "索引"],
               body=base_body)
     packs.append(char_id + "-base")
 
-    # ② 故事包（铁律②：超长背景才分立）
+    # ② origin 包（铁律②：背景故事包，默认必有，无论长短独立成包）
     if origin_parts:
         origin_body = "\n\n".join(origin_parts) + "\n"
         mem.write(char_id + "-origin", "%s · 背景故事" % disp,
-                  "故事包：人生经历 / 背景（超长叙事分立）",
-                  aliases=["背景", "故事", "人生经历"],
-                  tags=["oc", "故事包"],
+                  "origin 包（背景故事包）：人生经历 / 背景，无论长短独立成包",
+                  person={disp: [char_id]},
+                  topic={"背景故事": ["背景", "故事", "人生经历"]},
+                  tags=["oc", "origin 包", "背景故事包"],
                   body=origin_body)
         packs.append(char_id + "-origin")
 
@@ -160,7 +179,8 @@ def build(source, char_id, name=None, root=None):
         ext_body = "\n\n".join(ext_parts) + "\n"
         mem.write(char_id + "-ext", "%s · 拓展" % disp,
                   "拓展包：能力 / 装备 / 参与事件 / 人物关系（合并）",
-                  aliases=["拓展", "能力", "关系", "装备", "事件"],
+                  person={disp: [char_id]},
+                  topic={"拓展": ["能力", "关系", "装备", "事件"]},
                   tags=["oc", "拓展包"],
                   body=ext_body)
         packs.append(char_id + "-ext")

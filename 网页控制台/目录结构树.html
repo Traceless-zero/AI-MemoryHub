@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AIMH · 记忆索引台</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  :root{
+    --paper:#EDF0F2;
+    --surface:#F7F8FA;
+    --card:#FFFFFF;
+    --ink:#1C2230;
+    --ink-soft:#3A4252;
+    --muted:#767E8C;
+    --line:#DCE0E6;
+    --line-strong:#C7CDD6;
+    --accent:#B0791E;
+    --accent-weak:rgba(176,121,30,.12);
+    --accent-ink:#7A5310;
+    --danger:#B4453A;
+    --radius:10px;
+    --display:"Space Grotesk",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --body:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font-family:var(--body);background:var(--paper);color:var(--ink);
+       font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+  /* ── top bar: brand+anchor-toggle | search(center) | cluster ── */
+  .topbar{display:grid;grid-template-columns:1fr minmax(280px,560px) 1fr;align-items:center;
+          gap:14px;padding:11px 18px;background:var(--surface);border-bottom:1px solid var(--line);
+          position:sticky;top:0;z-index:30}
+  .brand-cluster{display:flex;align-items:center;gap:12px;justify-self:start}
+  .wordmark{font-family:var(--display);font-weight:700;font-size:17px;letter-spacing:.3px;color:var(--ink);
+            display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+  .wordmark b{color:var(--accent)}
+  .wordmark small{font-family:var(--body);font-weight:400;font-size:12px;color:var(--muted);letter-spacing:0}
+  .topbar .search{display:flex;gap:8px;justify-self:center;width:100%}
+  .topbar .search input{flex:1;padding:9px 14px;border:1px solid var(--line-strong);border-radius:9px;
+                        font-size:13.5px;outline:none;background:var(--card);color:var(--ink);
+                        transition:border-color .15s,box-shadow .15s}
+  .topbar .search input::placeholder{color:var(--muted)}
+  .topbar .search input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+  .topbar .search button{padding:9px 18px;border:1px solid var(--accent);border-radius:9px;
+                          background:var(--accent);color:#fff;cursor:pointer;font-size:13.5px;
+                          font-weight:600;font-family:var(--display);transition:background .15s}
+  .topbar .search button:hover{background:var(--accent-ink)}
+  .cluster{justify-self:end;display:flex;align-items:center;gap:12px}
+  .stat{font-family:var(--mono);font-size:11.5px;color:var(--muted);white-space:nowrap;border-right:1px solid var(--line);padding-right:12px}
+  .stat b{color:var(--ink-soft);font-weight:600}
+  .icon-btn{padding:8px 13px;border:1px solid var(--line-strong);background:var(--card);border-radius:9px;
+           cursor:pointer;font-size:12.5px;font-weight:600;font-family:var(--display);color:var(--ink-soft);
+           display:flex;align-items:center;gap:6px;transition:border-color .15s,color .15s}
+  .icon-btn:hover{border-color:var(--accent);color:var(--accent-ink)}
+  .icon-btn.on{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-weak)}
+
+  /* ── corner expand squares (left=anchor drawer, right=tree drawer) ── */
+  .corner-btn{position:absolute;top:52px;width:36px;height:36px;display:flex;align-items:center;justify-content:center;
+             border:1px solid var(--line-strong);background:var(--card);border-radius:10px;cursor:pointer;
+             font-size:15px;line-height:1;color:var(--ink-soft);z-index:20;box-shadow:0 2px 8px rgba(28,34,48,.10);
+             transition:border-color .15s,color .15s,background .15s,left .26s ease,right .26s ease,transform .12s}
+  .corner-btn:hover{border-color:var(--accent);color:var(--accent-ink);transform:translateY(-1px)}
+  .corner-btn.on{border-color:var(--accent);color:var(--accent-ink);background:var(--accent-weak)}
+  .corner-left{left:14px}
+  .corner-right{right:14px}
+
+  /* ── stage: reader (main) + two collapsible sidebars (left anchor / right tree) ── */
+  .stage{display:flex;height:calc(100vh - 56px)}
+  .reader-pane{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--paper);position:relative}
+  .breadcrumb{padding:11px 26px;border-bottom:1px solid var(--line);font-family:var(--mono);
+              font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+              background:var(--surface)}
+  .breadcrumb b{color:var(--ink-soft);font-weight:600}
+  .breadcrumb .sep{color:var(--line-strong)}
+  .breadcrumb.is-empty{display:none}
+  .reader-wrap{flex:1;display:flex;min-height:0}
+
+  /* left anchor drawer (collapsible, symmetric with right tree) */
+  .anchor-sidebar{width:212px;flex:0 0 auto;background:var(--surface);border-right:1px solid var(--line);
+                  display:flex;flex-direction:column;overflow:hidden;
+                  transition:width .26s ease,opacity .2s ease;opacity:1}
+  .anchor-sidebar.collapsed{width:0;opacity:0;border-right:0}
+  .anchor-list{flex:1;overflow:auto;padding:8px 8px 28px}
+  .anchor-link{display:block;padding:5px 10px;margin:2px 0;border-radius:6px;font-size:12px;color:var(--muted);
+               text-decoration:none;cursor:pointer;border-left:2px solid transparent;
+               transition:background .15s,color .15s,border-color .15s;line-height:1.4}
+  .anchor-link:hover{background:var(--accent-weak);color:var(--accent-ink);border-left-color:var(--accent)}
+  .anchor-link.active{background:var(--accent-weak);color:var(--accent-ink);border-left-color:var(--accent);font-weight:600}
+  .anchor-link.lvl3{padding-left:20px;font-size:11.5px}
+  .anchor-empty{display:block;padding:5px 10px;font-size:11.5px;color:var(--line-strong)}
+
+  /* reader: paper canvas with a centered embedded card (not edge-to-edge) */
+  .reader{flex:1;min-width:0;overflow:auto;padding:34px 30px}
+  .reader-card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+               box-shadow:0 8px 30px rgba(28,34,48,.08);max-width:820px;width:100%;
+               padding:36px 44px;margin:0 auto}
+  .reader h1,.reader h2,.reader h3,.reader h4{font-family:var(--display);color:var(--ink);
+           margin:18px 0 9px;line-height:1.35;scroll-margin-top:22px}
+  .reader h1{font-size:23px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  .reader h2{font-size:18px}
+  .reader h3{font-size:15px}
+  .reader p{margin:10px 0;color:var(--ink-soft)}
+  .reader ul{margin:10px 0;padding-left:22px}
+  .reader li{margin:5px 0;color:var(--ink-soft)}
+  .reader li::marker{color:var(--accent)}
+  .reader blockquote{margin:11px 0;padding:8px 14px;border-left:3px solid var(--accent);
+                     color:var(--muted);background:var(--paper);border-radius:0 8px 8px 0}
+  .reader code{background:var(--paper);padding:1px 6px;border-radius:5px;font-size:12px;
+               font-family:var(--mono);color:var(--accent-ink)}
+  .reader pre{background:var(--paper);padding:14px;border-radius:10px;overflow:auto;border:1px solid var(--line)}
+  .reader pre code{background:none;padding:0;color:var(--ink-soft)}
+
+  /* right tree sidebar (collapsible) */
+  .tree-sidebar{width:286px;flex:0 0 auto;background:var(--surface);border-left:1px solid var(--line);
+                display:flex;flex-direction:column;overflow:hidden;
+                transition:width .26s ease,opacity .2s ease;opacity:1}
+  .tree-sidebar.collapsed{width:0;opacity:0;border-left:0}
+  .pane-head{padding:11px 16px;border-bottom:1px solid var(--line);
+             font-family:var(--display);font-size:12px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;
+             color:var(--muted);display:flex;align-items:center;gap:8px}
+  .pane-head .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .tree{flex:1;overflow:auto;padding:8px 8px 28px}
+  .ns{margin:4px 0}
+  .ns-title{padding:7px 10px;cursor:pointer;border-radius:8px;font-family:var(--display);
+            font-weight:600;font-size:13px;color:var(--ink-soft);display:flex;align-items:center;gap:8px;transition:background .15s}
+  .ns-title::before{content:"▸";color:var(--accent);font-size:10px;transition:transform .2s}
+  .ns:not(.collapsed) .ns-title::before{transform:rotate(90deg)}
+  .ns-title:hover{background:var(--accent-weak)}
+  .pkg{margin:2px 0 2px 10px}
+  .pkg-title{padding:6px 10px;cursor:pointer;border-radius:8px;background:var(--card);
+             border:1px solid var(--line);font-size:12.5px;color:var(--ink);display:flex;align-items:center;gap:8px;
+             transition:border-color .15s,background .15s}
+  .pkg-title::before{content:"▸";color:var(--muted);font-size:9px;transition:transform .2s}
+  .pkg:not(.collapsed) .pkg-title::before{transform:rotate(90deg)}
+  .pkg-title:hover{border-color:var(--accent)}
+  .md{margin:2px 0 2px 12px}
+  .md-title{padding:5px 10px;cursor:pointer;border-radius:7px;font-size:12px;color:var(--muted);
+            border:1px solid transparent;transition:background .15s,color .15s,border-color .15s}
+  .md-title:hover{background:var(--accent-weak);color:var(--ink);border-color:var(--line)}
+  .md-title.active{background:var(--accent-weak);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+  .collapsed>.children{display:none}
+  .children{margin-left:6px;border-left:1px solid var(--line);padding-left:4px}
+
+  /* rendered markdown tables (GFM) */
+  table{border-collapse:collapse;width:100%;margin:12px 0;font-size:13px;background:var(--card)}
+  th,td{border:1px solid var(--line-strong);padding:7px 10px;text-align:left;vertical-align:top;line-height:1.5}
+  th{background:var(--accent-weak);color:var(--ink);font-weight:600}
+  tr:nth-child(even) td{background:var(--paper)}
+
+  /* search results sheet (overlay under search) */
+  .sheet{position:fixed;top:58px;left:50%;transform:translateX(-50%);width:min(580px,92vw);
+         max-height:64vh;overflow:auto;background:var(--card);border:1px solid var(--line-strong);
+         border-radius:14px;box-shadow:0 18px 50px rgba(28,34,48,.18);z-index:40;padding:8px;
+         display:none}
+  .sheet.open{display:block}
+  .sheet-head{padding:8px 12px;font-family:var(--display);font-size:12px;font-weight:600;color:var(--muted);
+              letter-spacing:.4px;border-bottom:1px solid var(--line);margin-bottom:6px}
+  .sheet-empty{padding:22px 14px;text-align:center;color:var(--muted);font-size:13px;line-height:1.7}
+  .srow{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:9px;cursor:pointer;
+        transition:background .15s}
+  .srow:hover{background:var(--paper)}
+  .srow-main{min-width:0;flex:1}
+  .srow-title{font-family:var(--display);font-size:14.5px;font-weight:600;color:var(--ink);margin-bottom:3px}
+  .srow-meta{font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+  .srow-meta .pkg-tag{color:var(--accent-ink);background:var(--accent-weak);padding:1px 7px;border-radius:6px}
+  .srow-about{font-size:12.5px;color:var(--ink-soft);line-height:1.55}
+  .strength{display:flex;gap:3px;align-items:center;flex:0 0 auto;margin-top:4px}
+  .strength .seg{width:9px;height:9px;border-radius:2px;background:var(--line-strong)}
+  .strength .seg.on{background:var(--accent)}
+  .strength .num{font-family:var(--mono);font-size:10.5px;color:var(--muted);margin-left:5px}
+  .sheet-back{padding:6px 12px;font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);
+              cursor:pointer;user-select:none}
+  .sheet-back:hover{text-decoration:underline}
+  .srow-pkg{border-left:3px solid var(--accent)}
+  .srow-pkg .srow-title{font-size:13.5px}
+
+  /* states */
+  .empty{padding:48px 30px;text-align:center;color:var(--muted);font-size:14px;line-height:1.8}
+  .empty b{color:var(--ink-soft)}
+  .err{color:var(--danger)}
+
+  /* focus + motion */
+  a:focus-visible,button:focus-visible,input:focus-visible,[class$="title"]:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+  @media (max-width:900px){
+    .topbar{grid-template-columns:auto 1fr auto}
+    .wordmark small{display:none}
+    .stat{display:none}
+    .tree-sidebar{position:fixed;top:56px;right:0;bottom:0;width:300px;z-index:35;
+                 box-shadow:-12px 0 40px rgba(28,34,48,.15)}
+    .tree-sidebar.collapsed{width:0}
+    .anchor-sidebar{position:fixed;top:56px;left:0;bottom:0;width:240px;z-index:35;
+                    box-shadow:12px 0 40px rgba(28,34,48,.15)}
+    .anchor-sidebar.collapsed{width:0}
+    .reader{padding:22px 16px}
+    .reader-card{border:0;box-shadow:none;padding:22px 18px}
+    .corner-btn{top:50px}
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand-cluster">
+    <div class="wordmark">AIMH<b>·</b><small>记忆索引台</small></div>
+  </div>
+  <div class="search">
+    <input id="q" placeholder="检索记忆：关键词、实体或问题（如 示例角色 唱片）" onkeydown="if(event.key==='Enter')doSearch()">
+    <button onclick="doSearch()">检索</button>
+  </div>
+  <div class="cluster">
+    <span class="stat" id="stat"></span>
+  </div>
+</header>
+
+<div class="stage">
+  <aside class="anchor-sidebar" id="anchorSidebar">
+    <div class="pane-head"><span class="dot"></span>章节锚点</div>
+    <div class="anchor-list" id="anchorList"><span class="anchor-empty">选择笔记后显示</span></div>
+  </aside>
+
+  <main class="reader-pane">
+    <button class="corner-btn corner-left on" id="anchorToggle" title="章节锚点" aria-label="切换章节锚点" onclick="toggleAnchor()">☰</button>
+    <button class="corner-btn corner-right on" id="treeToggle" title="结构树" aria-label="切换结构树" onclick="toggleTree()">☰</button>
+    <div class="breadcrumb is-empty" id="breadcrumb"><span class="anchor-empty">未选择笔记</span></div>
+    <div class="reader-wrap">
+      <article class="reader" id="reader">
+        <div class="reader-card"><div class="empty">这是<b>内容浏览器</b>。<br>打开右侧结构树选一篇笔记，或在顶部搜索。<br>正文会作为<b>居中内嵌卡片</b>呈现，左侧是<b>章节锚点抽屉</b>。</div></div>
+      </article>
+    </div>
+  </main>
+
+  <aside class="tree-sidebar" id="treeSidebar">
+    <div class="pane-head"><span class="dot"></span>结构树</div>
+    <div class="tree" id="tree"><div class="empty">加载结构树…</div></div>
+  </aside>
+</div>
+
+<div class="sheet" id="searchSheet"></div>
+
+<script src="marked.min.js"></script>
+<script>
+const API='http://127.0.0.1:8765';   // 接 tree_server.py 真实后端（memory/index.db + hma_core）；置 '' 退回内置 mock 预览
+
+function el(tag,cls,txt){const e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+function esc(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+/* ── mock dataset (fallback when no backend) ── */
+const MD_FOUR_LAYER=`# 四层架构
+
+AIMH 的引擎分层，自底向上承载「写入确定、读取最小必要」的泥沼隐喻。
+
+## 存储层
+
+落盘 \`[{规范名:[变体]}]\`，四要素 person / event_date / location / topic 是一等字段。有内容就填，留空等于漏召回。
+
+## 引擎层 hma_core
+
+确定性召回与消歧：F+C+A+READ 四级管道，rerank 默认关，dK 裁切按 \`waterfall_cut\` 做关联度分差截断。
+
+## 接口层
+
+MCP 暴露 7 个工具，WorkBuddy 记忆写入路径已通；daylog 是唯一事件流权威源。
+
+## 理解层
+
+AI 只做理解，不替脚本做路由决策。锚点级特征化是铁律，泛化锚点会被 BM25 稀释。
+
+## 小结
+
+四层各司其职，写入侧确定性、读取侧最小必要。
+`;
+const MD_CEMA=`# CEMA 原则
+
+Cognitive Event-driven Memory Architecture——设计原则命名，非代码标识符。
+
+## AI 只理解
+
+读入自然语言，输出结构化四要素与描述表达式，不猜测、不路由。
+
+## 脚本确定性写入
+
+回写必须走 \`to_markdown\`（多行 v3），禁止 json.dumps 直写 anchors。
+
+## 零依赖零 ML
+
+pyproject dependencies=[]；rerank 是确定性 BM25，反向量、rerank 都不是 LLM。
+`;
+const MD_THREE=`# 三级检索漏斗
+
+L1 → L2 → L3 逐级缩圈与消歧。
+
+## L1 子串变体归一
+
+把同义写法归一缩圈，降低候选爆炸。
+
+## L2 消歧
+
+F-stage 子串变体归一 → C+A 消歧，锁定目标包。
+
+## L3 读取与选段
+
+READ → REFINE → rerank；选段归 LLM 理解层，BM25 rerank 管不到段内选段。
+`;
+const MD_CAMUS=`# 加缪荒诞重释
+
+用户对个人化重构：荒诞只能在与能回应却拒绝回应的社会他者间被经验。
+
+## 宇宙是死物
+
+与石头「对峙」产生荒诞是人格化谬误；石头不会回应，荒诞无从产生。
+
+## 荒诞在社会
+
+荒诞经验的两个主体都是人：一方能回应，一方拒绝回应。
+
+## 与标准框架的冲突
+
+标准「与世界沉默对峙」框架，建立在未被证成的人格化前提上。
+`;
+function MD_GENERIC(path){
+  const name=(path.split('/').pop()||'笔记').replace(/\.md$/,'');
+  return `# ${name}\n\n这是一份示例笔记（mock 预览）。接入真实后端后将显示正文。\n\n## 概述\n\n本笔记用于演示小说式布局与章节锚点索引。\n\n## 关键点\n\n- 锚点抽屉会列出本页所有二级/三级标题\n- 点左侧锚点可快速跳转到对应章节\n- 当前阅读章节会随滚动高亮\n`;
+}
+const MOCK={
+  tree:{package_total:12,md_total:47,namespaces:[
+    {ns:"原创角色",packages:[
+      {package_id:"示例角色·起源史诗",mds:[
+        {file:"demo-origin.md",title:"示例角色的起源",summary:"从国之利刃到暗影孤狼的身世脉络",path:"memory/原创角色/示例角色·起源史诗/demo-origin.md"},
+        {file:"demo-char-relations.md",title:"示例角色的人物关系",summary:"与关键角色的情感与对抗线",path:"memory/原创角色/示例角色·起源史诗/demo-char-relations.md"}]},
+      {package_id:"暗影孤狼",mds:[
+        {file:"lone-wolf.md",title:"暗影孤狼设定",summary:"代号、能力与世界观定位",path:"memory/原创角色/暗影孤狼/lone-wolf.md"}]}]},
+    {ns:"项目·AIMH",packages:[
+      {package_id:"架构设计",mds:[
+        {file:"four-layer.md",title:"四层架构",summary:"存储 / 引擎 / 接口 / 理解层",path:"memory/项目·AIMH/架构设计/four-layer.md"},
+        {file:"cema.md",title:"CEMA 原则",summary:"AI 只理解、脚本确定性写入",path:"memory/项目·AIMH/架构设计/cema.md"}]},
+      {package_id:"召回管线",mds:[
+        {file:"three-stage.md",title:"三级检索漏斗",summary:"L1→L2→L3 消歧",path:"memory/项目·AIMH/召回管线/three-stage.md"}]},
+      {package_id:"打分框架",mds:[
+        {file:"scoring.md",title:"召回打分常量",summary:"BASE_UNIT / GAP_REF / 饱和",path:"memory/项目·AIMH/打分框架/scoring.md"}]}]},
+    {ns:"哲学",packages:[
+      {package_id:"存在主义随笔",mds:[
+        {file:"camus.md",title:"加缪荒诞重释",summary:"荒诞只能在与他者间被经验",path:"memory/哲学/存在主义随笔/camus.md"}]},
+      {package_id:"尼采",mds:[
+        {file:"wille.md",title:"生命意志 vs 权力意志",summary:"用户对 Macht 的重新解读",path:"memory/哲学/尼采/wille.md"}]}]}
+  ]},
+  search(q){
+    const all=[];
+    MOCK.tree.namespaces.forEach(ns=>ns.packages.forEach(p=>p.mds.forEach(m=>{
+      all.push({title:m.title,package_id:p.package_id,filepath:m.path,summary:m.summary,ns:ns.ns});
+    })));
+    const kw=q.trim().toLowerCase();
+    if(!kw) return {stage:'zero'};
+    const hit=all.filter(m=>(m.title+m.summary+m.package_id+m.ns).toLowerCase().includes(kw));
+    const results=hit.slice(0,10).map((m,i)=>({...m,score:94-i*6+(i%2?3:-2)}));
+    return results.length?{stage:'hit',results}:{stage:'zero'};
+  },
+  md(path){
+    const map={
+      'memory/项目·AIMH/架构设计/four-layer.md':MD_FOUR_LAYER,
+      'memory/项目·AIMH/架构设计/cema.md':MD_CEMA,
+      'memory/项目·AIMH/召回管线/three-stage.md':MD_THREE,
+      'memory/哲学/存在主义随笔/camus.md':MD_CAMUS
+    };
+    return {content:map[path]||MD_GENERIC(path)};
+  }
+};
+
+/* ── API helpers (keep backend contract; fall back to mock) ── */
+async function apiTree(){ if(!API) return MOCK.tree; const r=await fetch(API+'/api/tree'); return r.json(); }
+async function apiSearch(q,topk,scope){
+  if(!API) return MOCK.search(q,topk,scope);
+  const r=await fetch(API+'/api/search?q='+encodeURIComponent(q)+'&top_k='+topk+(scope?'&scope='+encodeURIComponent(scope):''));
+  return r.json();
+}
+async function apiMd(path){ if(!API) return MOCK.md(path); const r=await fetch(API+'/api/md?path='+encodeURIComponent(path)); return r.json(); }
+
+/* ── markdown render (vendored marked.js · 全 GFM 支持；标题注入 id 供锚点目录) ── */
+let _hCount=0;
+marked.use({
+  gfm:true,
+  breaks:true,
+  renderer:{
+    heading(text, level){
+      const id='sec'+(_hCount++);
+      return '<h'+level+' id="'+id+'">'+text+'</h'+level+'>';
+    },
+    paragraph(text){
+      // 旧渲染器每行一 <p> 形成段间留白；breaks:true 给的是 <br>（CSS 无法可靠加段距）。
+      // 这里把硬换行拆回独立 <p> 块，旧 CSS `.reader p{margin:10px 0}` 自动还原段距。
+      return text.split(/<br\s*\/?>/i).map(s=>s.trim()).filter(s=>s).map(s=>'<p>'+s+'</p>').join('');
+    },
+    tablecell(content, flags){
+      const a = flags.align ? ' style="text-align:'+flags.align+'"' : '';
+      return '<'+(flags.header?'th':'td')+a+'>'+content+'</'+(flags.header?'th':'td')+'>';
+    }
+  }
+});
+function renderMarkdown(src){
+  if(!src) return '';
+  let body=src;
+  const fm=body.match(/^---\s*\n[\s\S]*?\n---\s*\n?/);
+  if(fm) body=body.slice(fm[0].length);
+  _hCount=0;
+  return marked.parse(body);
+}
+
+/* ── browse tree ── */
+async function loadTree(){
+  try{
+    const d=await apiTree();
+    document.getElementById('stat').innerHTML=`收录 <b>${d.package_total}</b> 包 · <b>${d.md_total}</b> 篇 · <b>${d.namespaces.length}</b> 类`;
+    renderTree(d);
+  }catch(e){ document.getElementById('tree').innerHTML='<div class="err">结构树加载失败：'+e+'</div>'; }
+}
+function renderTree(d){
+  const root=el('div');
+  d.namespaces.forEach(ns=>{
+    const nsDiv=el('div','ns'); const nsTitle=el('div','ns-title',ns.ns+'  ('+ns.packages.length+')');
+    const children=el('div','children'); nsTitle.onclick=()=>nsDiv.classList.toggle('collapsed');
+    ns.packages.forEach(pkg=>{
+      const pkgDiv=el('div','pkg'); const pkgTitle=el('div','pkg-title',pkg.package_id+'  ('+pkg.mds.length+')');
+      const pkgChildren=el('div','children'); pkgTitle.onclick=()=>pkgDiv.classList.toggle('collapsed');
+      pkg.mds.forEach(md=>{
+        const mdDiv=el('div','md'); const mdTitle=el('div','md-title',md.file);
+        mdTitle.title=md.title+(md.summary?'\n'+md.summary:'');
+        mdTitle.onclick=()=>{ markActive(mdTitle); showMd(md.path,md.title,pkg.package_id,ns.ns); };
+        mdDiv.appendChild(mdTitle); pkgChildren.appendChild(mdDiv);
+      });
+      pkgDiv.appendChild(pkgTitle); pkgDiv.appendChild(pkgChildren); children.appendChild(pkgDiv);
+    });
+    nsDiv.appendChild(nsTitle); nsDiv.appendChild(children); root.appendChild(nsDiv);
+  });
+  const t=document.getElementById('tree'); t.innerHTML=''; t.appendChild(root);
+}
+function markActive(node){ document.querySelectorAll('.md-title.active').forEach(n=>n.classList.remove('active')); if(node) node.classList.add('active'); }
+
+/* ── sidebar toggles ── */
+function toggleTree(){
+  const sb=document.getElementById('treeSidebar'); const btn=document.getElementById('treeToggle');
+  const c=sb.classList.toggle('collapsed'); btn.classList.toggle('on',!c);
+}
+function toggleAnchor(){
+  const sb=document.getElementById('anchorSidebar'); const btn=document.getElementById('anchorToggle');
+  const c=sb.classList.toggle('collapsed'); btn.classList.toggle('on',!c);
+}
+
+/* ── search results sheet ── */
+function strengthBar(score){
+  const wrap=el('div','strength'); const filled=Math.max(0,Math.min(5,Math.round((score||0)/20)));
+  for(let i=0;i<5;i++) wrap.appendChild(el('span','seg'+(i<filled?' on':'')));
+  wrap.appendChild(el('span','num',(score||0))); return wrap;
+}
+function openSheet(){ document.getElementById('searchSheet').classList.add('open'); }
+function closeSheet(){ document.getElementById('searchSheet').classList.remove('open'); }
+async function runSearch(q,scope){
+  const sheet=document.getElementById('searchSheet');
+  sheet.innerHTML='<div class="sheet-empty">检索中…</div>'; openSheet();
+  try{
+    const d=await apiSearch(q,10,scope);
+    renderResults(d,q);
+  }catch(e){ sheet.innerHTML='<div class="err">检索失败：'+e+'</div>'; }
+}
+async function doSearch(){
+  const q=document.getElementById('q').value.trim();
+  if(!q){ closeSheet(); return; }
+  runSearch(q);
+}
+async function drillToPackage(q,pkgId){ runSearch(q,pkgId); }
+function backToPackages(q){ runSearch(q); }
+function renderResults(d,q){
+  const sheet=document.getElementById('searchSheet'); sheet.innerHTML='';
+  const head=el('div','sheet-head');
+  if(d.level==='package') head.textContent='包级检索：'+q+'（'+(d.results?d.results.length:0)+' 个包）';
+  else if(d.drilled) head.textContent='锚点检索：'+q+'（'+(d.package_id||'')+'）';
+  else head.textContent= d.stage==='zero'?'未命中：'+q : '锚点检索：'+q;
+  sheet.appendChild(head);
+  if(d.drilled){
+    const back=el('div','sheet-back','◂ 返回包列表'); back.onclick=(e)=>{ e.stopPropagation(); backToPackages(q); };
+    sheet.appendChild(back);
+  }
+  if(d.stage==='zero'||!d.results||!d.results.length){
+    const se=el('div','sheet-empty'); se.innerHTML='没有匹配的笔记。<br>换个关键词，或打开右侧结构树浏览。'; sheet.appendChild(se); return;
+  }
+  const list=el('div','sheet-list');
+  if(d.level==='package'){
+    d.results.forEach(it=>{
+      const row=el('div','srow srow-pkg'); row.appendChild(strengthBar(it.score));
+      const main=el('div','srow-main');
+      main.appendChild(el('div','srow-title', it.package_id));
+      const meta=el('div','srow-meta'); if(it.ns) meta.appendChild(el('span','pkg-tag',it.ns));
+      meta.appendChild(el('span',null,'点击展开该包章节锚点'));
+      main.appendChild(meta);
+      row.appendChild(main);
+      row.onclick=(e)=>{ e.stopPropagation(); drillToPackage(q, it.package_id); };
+      list.appendChild(row);
+    });
+  } else {
+    d.results.forEach(it=>{
+      const row=el('div','srow'); row.appendChild(strengthBar(it.score));
+      const main=el('div','srow-main');
+      main.appendChild(el('div','srow-title', it.title||'(无标题)'));
+      const meta=el('div','srow-meta'); meta.appendChild(el('span','pkg-tag',it.package_id)); if(it.ns) meta.appendChild(el('span',null,it.ns));
+      main.appendChild(meta); if(it.summary) main.appendChild(el('div','srow-about',it.summary));
+      row.appendChild(main);
+      row.onclick=(e)=>{ e.stopPropagation(); showMd(it.filepath,it.title,it.package_id,it.ns,it.title); closeSheet(); };
+      list.appendChild(row);
+    });
+  }
+  sheet.appendChild(list);
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeSheet(); });
+document.addEventListener('click',e=>{
+  const sheet=document.getElementById('searchSheet');
+  if(sheet.classList.contains('open') && !sheet.contains(e.target) && !e.target.closest('.search')) closeSheet();
+});
+
+/* ── reader + anchor drawer (with scroll-spy) ── */
+async function showMd(path,title,pkg,ns,scrollTo){
+  const reader=document.getElementById('reader'); const bc=document.getElementById('breadcrumb'); const card=reader.querySelector('.reader-card');
+  card.innerHTML='<div class="empty">读取中…</div>';
+  try{
+    const d=await apiMd(path);
+    if(d.error){ card.innerHTML='<div class="err">'+esc(d.error)+'</div>'; return; }
+    card.innerHTML=(renderMarkdown(d.content)||'<div class="empty">(空)</div>');
+    buildAnchorMargin(reader);
+    bc.innerHTML=''; bc.classList.remove('is-empty'); if(ns){bc.appendChild(el('b',null,ns));bc.appendChild(el('span','sep','/'));}
+    if(pkg){bc.appendChild(el('b',null,pkg));bc.appendChild(el('span','sep','/'));}
+    bc.appendChild(el('span',null,title||'(无标题)'));
+    reader.scrollTop=0; updateActiveAnchor();
+    if(scrollTo){ jumpToHeading(reader, scrollTo); }
+  }catch(e){ card.innerHTML='<div class="err">读取失败：'+e+'。请检查后端是否运行，或刷新重试。</div>'; }
+}
+function buildAnchorMargin(reader){
+  const list=document.getElementById('anchorList');
+  list.innerHTML='';
+  const heads=reader.querySelectorAll('h2,h3');
+  if(!heads.length){ list.appendChild(el('span','anchor-empty','本文无章节锚点')); return; }
+  heads.forEach(h=>{
+    const a=el('a','anchor-link'+(h.tagName==='H3'?' lvl3':''),h.textContent); a.href='#'+h.id;
+    a.onclick=(e)=>{e.preventDefault();h.scrollIntoView({behavior:'smooth',block:'start'}); setActiveAnchor(a);};
+    list.appendChild(a);
+  });
+}
+function jumpToHeading(reader, txt){
+  const t=(txt||'').trim(); if(!t) return;
+  const heads=reader.querySelectorAll('h2,h3');
+  let target=null;
+  for(const h of heads){ if(h.textContent.trim()===t){ target=h; break; } }
+  if(!target){ for(const h of heads){ if(h.textContent.includes(t)){ target=h; break; } } }
+  if(!target) return;
+  target.scrollIntoView({behavior:'smooth', block:'start'});
+  document.querySelectorAll('.anchor-link').forEach(a=>{
+    if(a.textContent.trim()===target.textContent.trim()){ setActiveAnchor(a); }
+  });
+}
+function setActiveAnchor(active){
+  document.querySelectorAll('.anchor-link.active').forEach(n=>n.classList.remove('active'));
+  if(active) active.classList.add('active');
+}
+/* scroll-spy: highlight the anchor for the section currently in view */
+function updateActiveAnchor(){
+  const reader=document.getElementById('reader');
+  const heads=[...reader.querySelectorAll('h2,h3')];
+  if(!heads.length) return;
+  const line=reader.getBoundingClientRect().top + 90;   // active line ~90px below top edge
+  let current=heads[0];
+  for(const h of heads){ if(h.getBoundingClientRect().top <= line) current=h; else break; }
+  document.querySelectorAll('.anchor-link').forEach(a=>{
+    a.classList.toggle('active', a.getAttribute('href')==='#'+current.id);
+  });
+}
+
+loadTree();
+document.getElementById('reader').addEventListener('scroll',updateActiveAnchor,{passive:true});
+</script>
+</body>
+</html>

@@ -194,12 +194,20 @@ MODULE_SETS = {
 
 
 def build_module_set(tset, project, path):
-    """生成项目模块集骨架：返回 [(out_path, md_text), ...]。linked 四模块互链。"""
+    """生成项目模块集骨架：返回 [(out_path, md_text), ...]。linked 四模块互链。
+
+    linked 用相对 memory/ 根的复合 id（SCHEMA §2.6：目录＋.md，跨项目同名不歧义）；
+    引擎对裸 stem 虽有后缀兜底，但骨架是多数落库的起点，一律按权威形态生成。
+    """
     mods = MODULE_SETS[tset]
     ids = [f"{project}-{name}" for name, _, _, _ in mods]
+    dir_seg = path.replace("\\", "/").strip("/")
+    m = re.search(r"(?:^|/)memory/(.+)$", dir_seg)
+    if m:
+        dir_seg = m.group(1).strip("/")
     out = []
     for (name, kw_event, kw_anchor, body_tpl), mid in zip(mods, ids):
-        siblings = [x for x in ids if x != mid]
+        siblings = [f"{dir_seg}/{x}.md" for x in ids if x != mid]
         d = {
             "title": f"{project} {name}",
             "summary": f"<2~4 句自包含真概要：{project} 的{name}模块，落关键事实首行>",

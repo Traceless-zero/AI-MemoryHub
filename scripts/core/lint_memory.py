@@ -24,7 +24,7 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from hma.hma_core import EventPackage, _four_to_list  # noqa: E402
-from hma.fm_schema import check_kw, check_kw_warn  # noqa: E402
+from hma.fm_schema import check_kw  # noqa: E402
 
 REQUIRED = [
     "title", "summary", "tags", "linked", "anchors",
@@ -220,7 +220,6 @@ def lint_file(fp, text):
                 "event_date": pkg.event_date,
             }
             errs.extend(check_kw(d))
-            warns.extend(check_kw_warn(d))
     except Exception as e:  # pragma: no cover
         warns.append("WARN 引擎解析异常: %s" % e)
 

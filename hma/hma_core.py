@@ -369,10 +369,12 @@ class _MechanicalLayer:
         （对照 _corpus_top_term_hit_files 用 _boundary_hit 是另一条路：它的误伤是
         「漏拒」，故偏严——两条路径误差方向本就相反，匹配口径应相反。）
 
-        性能：优先用 search_blob 列 SQL 子串判定（O(候选) 而非全库逐文件读盘，
-        实测 9000 文件全扫≈22s → SQL LIKE≈8ms）；search_blob 已含正文+锚点文本，
-        子串口径与原「正文 OR 锚点文本」一致。列未填充（旧库未 rebuild，search_blob
-        全 NULL）时 LIKE 漏 NULL 行会假拒答，故退回逐文件读盘兜底（兼容旧库）。
+        两段式（检索层无正文，正文按需打捞——设计铁律）：
+          1. search_blob 列 SQL 子串判定（O(候选)，实测 9000 文件≈8ms）。blob 只含
+             FM 层文本（title/summary/四要素/tags/linked/锚点 C+A+K），不含正文；
+          2. blob 未命中 ≠ 语料无此词（词可能只在正文）→ 逐文件打捞：读 .md 正文
+             子串确认（此时才读盘），正文永不进索引。真域外词付出一次全库扫描
+             （57 包毫秒级；注释记载 3000 文件≈2.8s），换来「域内正文词不被假拒答」。
         """
         tl = (term or "").lower()
         if not tl:
@@ -386,7 +388,7 @@ class _MechanicalLayer:
                 params += [pid, pid]
             if c.execute(sql, params).fetchone():
                 return True
-            return False
+            # blob（FM 层）零命中：不就此断言语料缺失，落到逐文件打捞读正文确认
         for fp in self._corpus_files(pid):
             b = self.read_body(fp)
             if b and tl in b.lower():

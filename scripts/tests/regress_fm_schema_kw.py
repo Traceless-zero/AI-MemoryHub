@@ -5,7 +5,7 @@
   (1) 去脆性：示例信物 归 锚定物品（非 关键事件）。
   (2) lint 不废：真实包 demo-origin / 存在主义随笔 均 0 ERROR。
       随笔因 person:[{用户}] 被归叙事通道，旧 check_kw 曾误拒它（概念4维缺），现已通过。
-  (3) 按通道发 WARN：叙事包只报 关键事件；(纯)概念包只报 概念4维。
+  (3) check_kw_warn 已移除（2026-09-02）：恒现 WARN 训练免疫，回读自检归 SCHEMA §2.0 纪律。
       注：随笔含 person:[{用户}] 作者标签 → 归叙事通道 → 其 WARN 也是 关键事件；
       故「概念4维 WARN」用无四要素/无时间的纯概念包验证，不依赖随笔作者标签。
   (4) 强制维仍生效：keywords 全空 → 两通道都不满 → ERROR（拦截脏数据）。
@@ -61,23 +61,8 @@ def main():
     all_ok &= assert_eq("demo-origin check_kw ERROR数", len(fm.check_kw(demo-char)), 0)
     all_ok &= assert_eq("存在主义随笔 check_kw ERROR数", len(fm.check_kw(essay)), 0)
 
-    banner("B. 按通道发 WARN：叙事包只报 关键事件；(纯)概念包只报 概念4维")
-    vw = fm.check_kw_warn(demo-char)
-    all_ok &= assert_eq("demo-origin WARN 含'关键事件'",
-                        any("关键事件" in w for w in vw), True)
-    all_ok &= assert_eq("demo-origin WARN 混入'概念4维'?",
-                        any("概念4维" in w for w in vw), False)
-    # 纯概念包：无 person/location，event_date='—' → pkg_narrative=False → 概念通道
-    concept_pkg = {
-        "event_date": "—", "person": [], "location": [], "topic": [],
-        "anchors": [{"Chapter": "C", "about": "x", "keywords": ["核心概念词"]}],
-    }
-    cw = fm.check_kw_warn(concept_pkg)
-    all_ok &= assert_eq("纯概念包 WARN 含'概念4维'",
-                        any("概念4维" in w for w in cw), True)
-    all_ok &= assert_eq("纯概念包 WARN 混入'关键事件'?",
-                        any("关键事件" in w for w in cw), False)
-    print("  demo-char WARN 条数=%d；纯概念包 WARN 条数=%d" % (len(vw), len(cw)))
+    banner("B. 按通道发 WARN（已删）——check_kw_warn 2026-09-02 拍板移除，其恒现性训练 WARN 免疫")
+    all_ok &= assert_eq("check_kw_warn 已移除?", hasattr(fm, "check_kw_warn"), False)
 
     banner("C. 去脆性：示例信物 → 锚定物品（非 关键事件）")
     adv = {

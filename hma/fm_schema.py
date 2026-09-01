@@ -52,7 +52,7 @@ KW_DIMS = ["时间", "地点", "关键事件", "锚定物品", "人物"]
 # 概念通道（学术书）5 维 keywords 契约（用户 2026-08-18 拍板）：技术/论证类文章走这套，
 # 不逼它填叙事实体维。每锚点 keywords 至少覆盖各 ≥1 token（严格，无适用维豁免）。
 CONCEPT_DIMS = ["核心概念", "相关论证", "关键结论", "前置依赖", "反例或争议"]
-# 概念维（论证/结论/依赖/争议）无确定性分类源 → 不在 _kw_covered_concept 强制，仅 check_kw_warn 建议。
+# 概念维（论证/结论/依赖/争议）无确定性分类源 → 不在 _kw_covered_concept 强制，由作者自判。
 
 # 变体疑似具体命名实体（非主题同义词）的廉价启发式
 _SUSPECT_VARIANT_CHARS = [
@@ -64,7 +64,7 @@ _SUSPECT_VARIANT_CHARS = [
 _PKG_FREQ_GATE = 3
 
 # ---------------------------------------------------------------------------
-# 2b. keywords 双通道完整性契约（硬过滤 + 通道内 WARN）
+# 2b. keywords 双通道完整性契约（硬过滤；无确定性源维由作者自判）
 # ---------------------------------------------------------------------------
 # 分类只靠**确定性来源**（四要素精确名宇宙 + 年份正则），不靠子串词袋猜分类：
 #   - 时间：年份/日期形态（_YEAR_RE）或 包级 event_date≠"—"（pkg_time_ok）
@@ -73,7 +73,7 @@ _PKG_FREQ_GATE = 3
 #   - 锚定物品：keyword ∈ 包 topic 四要素名宇宙（精确）或 残余兜底
 #   - 核心概念（概念通道）：残余兜底（任何 token 即核心概念）
 # 无确定性源的维（关键事件 / 概念4维:论证·结论·依赖·争议）不进强制契约，仅作
-# check_kw_warn 建议——它们问的是「作者写这词时想表达什么角色」，无法 deterministic
+# 它们问的是「作者写这词时想表达什么角色」，无法 deterministic
 # 验，硬验只能靠猜（脆性子串袋）。通道归属由包级类型 pkg_narrative 决定，非「哪份契约满足」。
 _YEAR_RE = re.compile(r"^\d{4}([-\u2010]\d{2}-\d{2})?$|^\d{4}-\d{4}$")
 
@@ -86,7 +86,7 @@ def _kw_covered_narrative(keywords, pkg_person_names, pkg_loc_names, pkg_topic_n
       - 地点：keyword ∈ 包 location 名宇宙（精确）
       - 人物：keyword ∈ 包 person 名宇宙（精确）或 含 ·
       - 锚定物品：keyword ∈ 包 topic 名宇宙（精确）或 残余兜底
-    关键事件 无确定性源 → 永不归入（交给 check_kw_warn 作建议 WARN）。
+    关键事件 无确定性源 → 永不归入（由作者自判）。
     """
     covered = set()
     has_residual = False
@@ -121,7 +121,7 @@ def check_kw5(d):
     """叙事通道 keywords 契约：每锚点 keywords 须覆盖【适用】叙事维各 ≥1 token。
 
     强制维 = 时间/地点/人物（包级有则适用，确定性源）+ 锚定物品（残余兜底）。
-    关键事件 无确定性源 → 已移出强制契约（见 check_kw_warn 建议 WARN）。
+    关键事件 无确定性源 → 已移出强制契约（由作者自判）。
     返回 ERROR 字符串列表（适用维缺任一即报错）。供 validate_fm 与 lint 共用。
     """
     errs = []
@@ -156,7 +156,7 @@ def check_kw5(d):
 def _kw_covered_concept(keywords):
     """概念通道分类：核心概念 靠残余兜底（任何 token 即核心概念）。
 
-    论证/结论/依赖/争议 无确定性源 → 不归入（交给 check_kw_warn 作建议 WARN）。
+    论证/结论/依赖/争议 无确定性源 → 不归入（由作者自判）。
     """
     has_residual = any(str(raw).strip() for raw in keywords)
     return {"核心概念"} if has_residual else set()
@@ -182,8 +182,8 @@ def check_kw(d):
       list1 = 故事书叙事维（时间/地点/人物 按包适用 + 锚定物品，确定性源）
       list2 = 学术书概念维（核心概念，残余兜底）
     通道归属由包级类型决定（pkg_narrative），强制维填满即通过；
-    关键事件 / 概念4维 无确定性源 → 不进强制契约（见 check_kw_warn）。
-    返回 ERROR 字符串列表（阻断写入）；WARN 见 check_kw_warn（不阻断）。
+    关键事件 / 概念4维 无确定性源 → 不进强制契约（由作者自判）。
+    返回 ERROR 字符串列表（阻断写入）。
     """
     errs = []
     anchors = d.get("anchors")
@@ -207,7 +207,7 @@ def check_kw(d):
         if not isinstance(kws, list):
             errs.append("ERROR anchors[%d].keywords 须为 list（双通道契约）" % i)
             continue
-        # 两条 list 各自覆盖情况（瘦身后强制维仅确定性源；关键事件/概念4维已降 WARN）
+        # 两条 list 各自覆盖情况（瘦身后强制维仅确定性源；关键事件/概念4维由作者自判）
         cov_nar = _kw_covered_narrative(kws, pkg_person, pkg_loc, pkg_topic, pkg_time_ok, applicable)
         mand_nar = (set(KW_DIMS) - {"关键事件"}) & applicable
         nar_ok = all(dim in cov_nar for dim in mand_nar)
@@ -225,45 +225,10 @@ def check_kw(d):
     return errs
 
 
-def check_kw_warn(d):
-    """双通道关键词契约的**建议** WARN（不阻断写入）。
-
-    通道归属由包级类型 _pkg_channel 决定，只报「该包所属通道」的相关 WARN，
-    另一通道的 WARN 直接不发（用户 2026-08-18：那个 list 被满足才报它的 WARN）：
-      - 叙事包：建议补充 关键事件 维（无确定性分类源，作者意图维）
-      - 概念包：建议补充 概念4维（论证/结论/依赖/争议）
-    """
-    warns = []
-    anchors = d.get("anchors")
-    if not isinstance(anchors, list):
-        return warns
-    pkg_person, pkg_loc, pkg_topic = _pkg_name_sets(d, ("person", "location", "topic"))
-    pkg_time_ok = bool(d.get("event_date")) and str(d.get("event_date")).strip() not in ("", "—")
-    pkg_narrative = bool(pkg_person) or bool(pkg_loc) or pkg_time_ok
-    applicable = {"锚定物品"}
-    if pkg_time_ok:
-        applicable.add("时间")
-    if pkg_loc:
-        applicable.add("地点")
-    if pkg_person:
-        applicable.add("人物")
-    con4 = set(CONCEPT_DIMS) - {"核心概念"}
-    for i, a in enumerate(anchors):
-        if not isinstance(a, dict):
-            continue
-        kws = a.get("keywords", a.get("tags"))
-        if not isinstance(kws, list):
-            continue
-        if pkg_narrative:
-            cov = _kw_covered_narrative(kws, pkg_person, pkg_loc, pkg_topic, pkg_time_ok, applicable)
-            if "关键事件" not in cov:
-                warns.append("WARN anchors[%d] 关键事件 维未显式标注（无确定性源，仅建议补充）" % i)
-        else:
-            cov_con = _kw_covered_concept(kws)
-            miss = [dim for dim in con4 if dim not in cov_con]
-            if miss:
-                warns.append("WARN anchors[%d] 概念4维未标注 %s（无确定性源，仅建议补充）" % (i, "/".join(miss)))
-    return warns
+# check_kw_warn 已删除（2026-09-02 拍板）：原按通道发「关键事件维 / 概念4维」建议 WARN，
+# 但这两维无确定性分类源，WARN 对所有锚点恒现、信息增量为零，只会训练「WARN 可无视」
+# 的免疫，反而毁掉「写后回读自检」纪律的触发效果。写后回读自检的提醒由
+# SCHEMA §2.0 纪律 + new_package --import 收尾输出承载。
 
 
 # ---------------------------------------------------------------------------
@@ -502,14 +467,11 @@ def _demo():
     for e in check_kw(cfull):
         print("   ", e)
     print("   → 硬过滤 %s（0 ERROR）" % ("拦截" if check_kw(cfull) else "通过"))
-    print("   建议 WARN:", check_kw_warn(cfull) or "（无）")
 
     print("[概念缺4维] keywords 仅 核心概念+前置依赖（缺 论证/结论/反例或争议）：")
     for e in check_kw(cmiss):
         print("   ", e)
-    print("   → 硬过滤 %s（概念4维已降为 WARN，不阻断写入）" % ("拦截" if check_kw(cmiss) else "通过"))
-    for w in check_kw_warn(cmiss):
-        print("     !", w)
+    print("   → 硬过滤 %s（概念4维由作者自判）" % ("拦截" if check_kw(cmiss) else "通过"))
 
 
 def main():

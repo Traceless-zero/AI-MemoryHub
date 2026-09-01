@@ -28,13 +28,20 @@ daylog 是 AIMH 的唯一**事件流权威源**（`memory/日志/daylog-YYYY-MM-
 python scripts/core/daylog_append.py --title "一句标题" \
     --touched "hma/server.py,项目/AIMH/SCHEMA" \
     --linked "项目/AIMH/开发日志" --tags "读取链路,MCP" \
+    --summary "当天真概要（可选，覆盖 FM 套话）" \
+    --anchor-about "本 beat 锚点的特征化摘要（可选）" \
     --body "正文……"            # 或 --body-file / stdin
 # 可选：--date 2026-08-15（默认今天）、--time 21:30（默认当前时间）
+#       --anchor-keywords "词1,词2"（缺省取 --tags）、--topic 可重复
 ```
 职责切分：
-- **AI 给**：标题、正文、`touched`（本次实际碰的文件，事实观察）、`linked`/`tags`（写入时顺手打标，可为空）。
+- **AI 给**：标题、正文、`touched`（本次实际碰的文件，事实观察）、`linked`/`tags`（写入时顺手打标，可为空）、
+  `anchor-about`（本 beat 锚点的特征化摘要——你在写这条 beat 时对内容最熟，**应当总是提供**）、
+  `summary`（当天真概要，可选）。
 - **脚本给**：daylog 文件创建（含 FM-V2 骨架）、`## 流水` 节、beat 序号自增（`### NN`）、时间戳、
-  touched 存在性校验（不存在仅告警）、`<!--beat ...-->` 注释拼装、`pkage_updated` 刷新。
+  touched 存在性校验（不存在仅告警）、`<!--beat ...-->` 注释拼装、`pkage_updated` 刷新、
+  **FM anchors 同步追加本 beat 锚点**（Chapter 机械=beat 标题；about 缺省机械兜底=正文首段跳过 touched 行）、
+  **FM linked 合并**（去重）、topic 合并、tags 底座强制。
 
 beat 块形态：
 ```
@@ -43,7 +50,8 @@ beat 块形态：
 正文（事实/决策/改动，详写）
 <!--beat linked:包/文件 tags:词1,词2-->
 ```
-daylog 特例：front-matter `event_date` 填当天日期（区别于概念文档的 `"—"`）。
+daylog 特例：front-matter `event_date` 填当天日期（区别于概念文档的 `"—"`）；
+FM anchors 随追加同步（08-15 范本形态），概括全天的「流水」总锚点归日终蒸馏/对齐，脚本不机械生成。
 
 ## 派生：scripts/core/derive_topic_views.py
 纯正则零 AI，挂进 `rebuild_index.py` 管线（「一键更新记忆索引.exe」顺带完成），也可单独跑：

@@ -16,11 +16,11 @@ daylog FM 规矩（2026-08-29 定稿四条 + 2026-09-02 补第五条，daylog设
   3. topic 合并去重：同日多 beat 带不同 --topic → 按规范名去重合并为多主题日
      （合法形态，列表承载）；同规范名变体取并集。
   4. 治理兜底：存量空 topic 的 daylog 由蒸馏/对齐补齐（08-15 为范本；空壳诚实保留）。
-  5. FM 与正文同步（2026-09-02）：每次追加必须同步维护 FM——anchors 追加本 beat 锚点
-     （Chapter 机械=beat 标题保证 read_section 可定位；about 由 --anchor-about 语义提供，
-     缺省机械兜底=正文首段跳过 touched 行【08-13 残片事故教训】；keywords 由
-     --anchor-keywords 提供，缺省取 --tags）；--linked 同时并入 FM linked（去重）；
-     --summary 覆盖 FM 套话为当天真概要。08-15 为范本形态。
+  5. FM 与正文同步（2026-09-02，fail-closed）：每次追加必须同步维护 FM——anchors 追加本
+     beat 锚点（Chapter 机械=beat 标题保证 read_section 可定位）。**about/keywords/summary
+     是 AI 语义职责，缺一律 error 拒绝落盘，无机械兜底**（铁律：FM 内容必须 AI 语义填写，
+     机械填充被禁止；也不从 --tags 机械搬运 keywords）。落盘前以 daylog 口径 validate_fm
+     终检（锚点 5 维豁免，其余契约全跑），不过不落盘。08-15 为范本形态。
 
 用法：
   python daylog_append.py --title "修了 query_anchors 中文参数" \
@@ -41,6 +41,12 @@ import json
 import os
 import re
 import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+
+from hma.fm_schema import validate_fm  # noqa: E402  唯一权威校验（fail-closed 同源 new_package --fill）
+from hma.hma_core import EventPackage  # noqa: E402  落盘前从拼装文本回读 FM 做终检
 
 DERIVED_HINT = "memory"
 
@@ -424,17 +430,12 @@ def _sync_anchor(text, chapter, about, keywords):
     return new_text, "appended"
 
 
-def _fallback_about(body):
-    """--anchor-about 缺省时的机械兜底：正文首个实质段（跳过 touched 行与 beat 注释）。
-
-    08-13 残片事故教训：touched 行绝不能当 about。机械兜底质量有限，
-    AI 记账时应传 --anchor-about 提供特征化摘要。"""
-    for para in body.split("\n"):
-        s = para.strip()
-        if not s or s.startswith("- touched:") or s.startswith("<!--beat") or s.startswith("### "):
-            continue
-        return s
-    return ""
+def _norm_field(v):
+    """读侧归一的裸 dict（{规范名:[变体]}）→ 规范 list[dict]；list 原样。
+    与 new_package._norm_field 同语义（validate_fm 的 four 契约要求 list[dict]）。"""
+    if isinstance(v, dict):
+        return [{k: (vs or [])} for k, vs in v.items()]
+    return v or []
 
 
 def _set_summary(text, summary):
@@ -485,12 +486,11 @@ def main(argv=None):
     ap.add_argument("--body", default=None, help="正文（缺省读 --body-file 或 stdin）")
     ap.add_argument("--body-file", default=None)
     ap.add_argument("--summary", default=None,
-                    help="当天 FM summary 真概要（规矩 5，可选；覆盖套话，不传不动不编造）")
+                    help="当天 FM summary 真概要（新建 daylog 必填，缺则 error 不落盘；已有文件可选覆盖）")
     ap.add_argument("--anchor-about", default=None,
-                    help="本 beat 锚点的特征化摘要（规矩 5，AI 语义提供；"
-                         "缺省机械兜底=正文首段跳过 touched 行，质量有限建议总是提供）")
+                    help="本 beat 锚点的特征化摘要（必填，AI 语义填写；机械填充被铁律禁止，缺则 error 不落盘）")
     ap.add_argument("--anchor-keywords", default=None,
-                    help="本 beat 锚点 keywords，逗号分隔（规矩 5；缺省取 --tags）")
+                    help="本 beat 锚点 keywords，逗号分隔（必填，AI 拆词提供，缺则 error 不落盘）")
     ap.add_argument("--date", default=None, help="YYYY-MM-DD，默认今天")
     ap.add_argument("--time", dest="time_str", default=None, help="HH:MM，默认当前时间")
     args = ap.parse_args(argv)
@@ -520,6 +520,27 @@ def main(argv=None):
     root = repo_root()
     path = _daylog_path(root, date)
     created = not os.path.exists(path)
+
+    # —— 写前门禁（fail-closed，铁律：FM 内容必须 AI 语义填写，机械填充被禁止）——
+    # 缺语义字段一律 error 拒绝落盘（与 new_package --fill 同口径），无任何机械兜底。
+    gate_errs = []
+    if not (args.anchor_about or "").strip():
+        gate_errs.append("ERROR 缺 --anchor-about：锚点 about 必须由 AI 阅读正文后语义填写"
+                         "（机械填充被铁律禁止），拒绝落盘")
+    anchor_kws = [k.strip() for k in (args.anchor_keywords or "").split(",") if k.strip()]
+    if not anchor_kws:
+        gate_errs.append("ERROR 缺 --anchor-keywords：锚点 keywords 必须由 AI 拆词提供"
+                         "（不从 --tags 机械搬运），拒绝落盘")
+    if created and not (args.summary or "").strip():
+        gate_errs.append("ERROR 新建 daylog 缺 --summary：FM summary 必须为当天真概要，"
+                         "不得落「YYYY-MM-DD 工作日志」套话")
+    if not (body or "").strip():
+        gate_errs.append("ERROR --body 为空：beat 正文是事件主体，拒绝落空 beat")
+    if gate_errs:
+        for e in gate_errs:
+            print(e)
+        return 1
+
     if created:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         text = FM_TEMPLATE.format(date=date, today=today)
@@ -565,12 +586,30 @@ def main(argv=None):
     if linked_items:
         text, _chg = _merge_linked(text, linked_items)
     chapter = "%02d · %s · %s" % (seq, args.title.strip(), time_str)
-    anchor_about = (args.anchor_about or "").strip() or _fallback_about(body)
-    anchor_kws = ([k.strip() for k in args.anchor_keywords.split(",") if k.strip()]
-                  if args.anchor_keywords else tags)
+    anchor_about = args.anchor_about.strip()
     text, anchor_state = _sync_anchor(text, chapter, anchor_about, anchor_kws)
     if args.summary is not None:
         text, _chg = _set_summary(text, args.summary)
+
+    # —— 落盘前权威终检（fail-closed，与 new_package --fill 同口径）——
+    # 从拼装完成的最终文本回读 FM（金标准：校验对象是即将落盘的真实形态而非中间 dict），
+    # daylog 口径 validate_fm（锚点 5 维豁免，其余契约全跑），不过则拒绝落盘。
+    fm_check = EventPackage.from_markdown_fm_only(text, path)
+    d = {
+        "title": fm_check.title, "summary": fm_check.summary,
+        "tags": fm_check.tags, "linked": fm_check.linked, "anchors": fm_check.anchors,
+        "person": _norm_field(fm_check.person),
+        "event_date": fm_check.event_date,
+        "location": _norm_field(fm_check.location),
+        "topic": _norm_field(fm_check.topic),
+        "pkage_created": fm_check.created, "pkage_updated": fm_check.updated,
+    }
+    fm_errs = validate_fm(d, daylog=True)
+    if fm_errs:
+        for e in fm_errs:
+            print(e)
+        print("[x] validate_fm（daylog 口径）未通过，拒绝落盘： %s" % path)
+        return 1
 
     tmp = path + ".tmp"
     with io.open(tmp, "w", encoding="utf-8") as f:
@@ -584,8 +623,6 @@ def main(argv=None):
         print("    [i] FM anchors 已同步追加本 beat 锚点（Chapter=%s）" % chapter)
     elif anchor_state == "exists":
         print("    [i] FM anchors 已存在同 Chapter 锚点，跳过（幂等）")
-    if not (args.anchor_about or "").strip():
-        print("    [!] 锚点 about 为机械兜底（正文首段）——建议下次 --anchor-about 提供特征化摘要")
     for t in touched:
         if not _touched_exists(root, t):
             print("[!] touched 未找到：%s（仅告警，不拦截）" % t)

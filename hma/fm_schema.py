@@ -271,10 +271,13 @@ def build_pkg_docs(memory_root):
 # ---------------------------------------------------------------------------
 # 3. 校验
 # ---------------------------------------------------------------------------
-def validate_fm(d, memory_root=None):
+def validate_fm(d, memory_root=None, daylog=False):
     """结构 + 语义校验。返回 error 字符串列表；空=通过。
 
     ``memory_root`` 提供时启用「跨包污染」语义规则（需 index.db）。
+    ``daylog=True`` 跳过 ⑤ 锚点双通道契约（daylog 锚点 keywords 从简是设计意图，
+    与 lint_memory 的 daylog 豁免同源；通用契约对 daylog 必拦：缺人物维等）。
+    daylog 的 about/keywords 非空校验由 daylog_append 写前门禁自行 fail-closed 强制。
     """
     errs = []
     if not isinstance(d, dict):
@@ -325,7 +328,9 @@ def validate_fm(d, memory_root=None):
                         errs.append(msg)
 
     # ⑤ 锚点 keywords 双通道完整性契约（硬过滤：叙事5维 / 概念5维 各缺一则 ERROR，阻断写入）
-    errs.extend(check_kw(d))
+    # daylog 口径跳过（豁免依据与 lint_memory 的 daylog 跳过同源；见 docstring）。
+    if not daylog:
+        errs.extend(check_kw(d))
 
     return errs
 

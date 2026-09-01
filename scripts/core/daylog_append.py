@@ -331,6 +331,35 @@ def _merge_linked(text, linked_items):
     return new_text, True
 
 
+def _parse_flow_list(v):
+    """YAML flow 风格数组（单/双引号项，如 ['流水', '锚点']）→ list[str]。
+
+    非数组形态返回 None（调用方按标量处理）。JSON 优先，本函数是单引号
+    YAML 风格的兜底（08-15 范本 keywords 即此形态）。"""
+    s = v.strip()
+    if not (s.startswith("[") and s.endswith("]")):
+        return None
+    inner = s[1:-1].strip()
+    if not inner:
+        return []
+    return [p.strip().strip('"').strip("'") for p in inner.split(",") if p.strip()]
+
+
+def _parse_anchor_field_value(v):
+    """锚点字段值解析：JSON → flow 风格数组 → 剥引号标量。"""
+    v = v.strip()
+    try:
+        return json.loads(v)
+    except Exception:
+        pass
+    fl = _parse_flow_list(v)
+    if fl is not None:
+        return fl
+    if v.startswith(("'", '"')) and v.endswith(("'", '"')) and len(v) >= 2:
+        return v[1:-1]
+    return v
+
+
 def _parse_anchors(fm_lines, ai, aj):
     """anchors 既有锚点（inline JSON / block Chapter-about-keywords 兼容）→ list[dict]。"""
     seg = "\n".join(fm_lines[ai:aj + 1]).split(":", 1)[1].strip()
@@ -350,13 +379,7 @@ def _parse_anchors(fm_lines, ai, aj):
             s = s[2:].strip()
         if cur is not None and ":" in s:
             k, _, v = s.partition(":")
-            k = k.strip().strip('"')
-            v = v.strip()
-            try:
-                v = json.loads(v)
-            except Exception:
-                pass
-            cur[k] = v
+            cur[k.strip().strip('"')] = _parse_anchor_field_value(v)
     if cur:
         out.append(cur)
     return out
@@ -369,6 +392,8 @@ def _render_anchors_block(anchors):
         lines.append("  - Chapter: %s" % json.dumps(str(a.get("Chapter", "")), ensure_ascii=False))
         lines.append("    about: %s" % json.dumps(str(a.get("about", "")), ensure_ascii=False))
         kws = a.get("keywords") or []
+        if isinstance(kws, str):
+            kws = [kws]
         lines.append("    keywords: %s" % json.dumps([str(k) for k in kws], ensure_ascii=False))
     return lines
 

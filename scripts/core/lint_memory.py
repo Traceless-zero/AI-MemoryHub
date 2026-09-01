@@ -202,13 +202,14 @@ def lint_file(fp, text):
         # 派生文件（含"本文件由脚本派生"标记，如 日志/主题索引.md）跳过——其锚点 keywords
         # 由派生脚本生成且恒为空（derive_topic_views 不产 keywords），按手写契约校验必然
         # ERROR；回填又会被派生覆盖。派生文件只查结构，不查内容 5 维（2026-08-19 C3）。
-        # daylog 包同理跳过（FM anchors=[] 走 derive 兜底 → 空 keywords 是设计意图非违规）。
+        # daylog 包同理跳过：daylog 锚点 keywords 允许从简（数量从简非可为空——内容由
+        # AI 记账时 --anchor-keywords 必填提供，见 daylog设计.md 规矩五），不满足通用
+        # 双通道 5 维，属设计意图非违规。
         _norm_fp = fp.replace("\\", "/")
         _is_derived = "本文件由脚本派生" not in text[:600]
         _is_daylog = "/日志/daylog-" in _norm_fp or "/日志\\daylog-" in _norm_fp
         if _is_derived and not _is_daylog:
-            # 预过滤：移除 derive 兜底产出的空 keywords 锚点（daylog 等文件
-            # 的 FM anchors=[] 走 derive 兜底 → keywords=[] 是设计意图，
+            # 预过滤：移除空 keywords 锚点（derive 兜底产出的派生锚点 keywords=[]，
             # 不该按手写契约报 ERROR）。只校验有实质 keywords 的锚点。
             _real_anchors = [a for a in pkg.anchors
                              if isinstance(a, dict) and a.get("keywords")]

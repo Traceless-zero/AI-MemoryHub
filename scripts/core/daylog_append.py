@@ -536,6 +536,10 @@ def main(argv=None):
                          "不得落「YYYY-MM-DD 工作日志」套话")
     if not (body or "").strip():
         gate_errs.append("ERROR --body 为空：beat 正文是事件主体，拒绝落空 beat")
+    bad_touched = [t for t in touched if not _touched_exists(root, t)]
+    if bad_touched:
+        gate_errs.append("ERROR --touched 路径不存在: %s（笔误或路径漂移；"
+                         "无触碰则不传 --touched，描述性文字不作路径）" % ", ".join(bad_touched))
     if gate_errs:
         for e in gate_errs:
             print(e)
@@ -623,9 +627,6 @@ def main(argv=None):
         print("    [i] FM anchors 已同步追加本 beat 锚点（Chapter=%s）" % chapter)
     elif anchor_state == "exists":
         print("    [i] FM anchors 已存在同 Chapter 锚点，跳过（幂等）")
-    for t in touched:
-        if not _touched_exists(root, t):
-            print("[!] touched 未找到：%s（仅告警，不拦截）" % t)
     return 0
 
 

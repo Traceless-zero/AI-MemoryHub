@@ -248,12 +248,14 @@ class _MechanicalLayer:
         的词（如 四要素/CEMA/学历/泥沼）。排除全局高频词（AIMH 几乎每文件都提，
         无判别力）。供语料包含性判据与 body 重排共用。
 
-        性能：优先用 search_blob 列 SQL 计频（O(命中) 而非全库逐文件读盘，
-        实测全库扫 3000 文件≈2.8s → SQL 计频≈ms 级）。search_blob 含正文+锚点文本，
-        比原 body-only 计频更贴近「语料真实频率」——锚点 about/keywords 频繁出现的
-        词本就是高频、不应当稀有判别词（原 body-only 会漏计、误判稀有）。列未填充
-        （旧库未 rebuild，search_blob 全 NULL）时 LIKE 漏 NULL 行会漏计→误判，
-        故退回 body-only 逐文件读盘兜底（旧库零回归）。
+        两段式计频（检索层无正文，正文按需打捞——设计铁律）：
+          1. search_blob 列 SQL 计频（O(命中)，实测 9000 文件≈8ms）。blob 只含 FM 层
+             文本（title/summary/四要素/tags/linked/锚点 C+A+K），不含正文；
+          2. blob 计 0 ≠ 语料无此词（词可能只在正文）→ 对计 0 词做一次全库打捞：
+             逐文件读 .md 正文计 df（一次读盘摊给全部计 0 词，57 包≈76ms），
+             与 _entity_in_corpus 的打捞兜底同口径——正文词不因索引形态被误判稀有。
+             锚点 about/keywords 频繁出现的词在 blob 层即高频，不受影响。列未填充
+             （旧库未 rebuild，search_blob 全 NULL）时退回 body-only 逐文件读盘（旧库零回归）。
         """
         cl = self._clean_entities(terms)
         if not cl:
@@ -269,11 +271,29 @@ class _MechanicalLayer:
                 total = c.execute("SELECT count(*) FROM events").fetchone()[0]
             if total == 0:
                 return []
-            out = []
+            freq = {}
+            zero = []
             for t in cl:
                 n = c.execute("SELECT count(*) FROM events WHERE search_blob LIKE ?",
                               ("%" + str(t).lower() + "%",)).fetchone()[0]
-                r = n / total
+                freq[t] = n
+                if n == 0:
+                    zero.append(t)
+            if zero:
+                zdf = {str(t).lower(): 0 for t in zero}
+                for fp in self._corpus_files(pid):
+                    b = self.read_body(fp)
+                    if not b:
+                        continue
+                    bl = b.lower()
+                    for tl, cnt in zdf.items():
+                        if tl in bl:
+                            zdf[tl] = cnt + 1
+                for t in zero:
+                    freq[t] = max(freq[t], zdf[str(t).lower()])
+            out = []
+            for t in cl:
+                r = freq[t] / total
                 if r >= 0.5:
                     continue
                 if len(t) <= 2 and r > 0.08:
@@ -318,9 +338,9 @@ class _MechanicalLayer:
         rare = self._rare_entities(terms, pid)
         crit = rare if rare else cl   # 纯项目名问题（无稀有实体）退化回全 clean
         # 候选预筛：search_blob 列 SQL 子串圈出可能命中的文件（O(候选) 而非全库
-        # 逐文件读盘）。search_blob 已含正文+锚点文本，子串口径是最终 _boundary_hit
-        # 判定的超集→边界判定只在候选上跑，精度不降、速度大幅升（实测全库扫 9000
-        # 文件≈22s → SQL LIKE≈8ms）。
+        # 逐文件读盘）。blob 只含 FM 层文本（检索层无正文）：blob 零命中时预筛
+        # 降级全量文件列表（见 _corpus_blob_candidates），最终 _boundary_hit 在
+        # 真正文上精确判定——正文按需打捞，精度不降。
         cands = self._corpus_blob_candidates(crit, pid)
         hits = []
         for fp in cands:
@@ -337,8 +357,13 @@ class _MechanicalLayer:
 
         仅当 _blob_ok【且】已全行填充（_blob_populated）时启用；否则退回
         _corpus_files 全量列表（旧库未 rebuild 兼容：列缺或全 NULL 时 LIKE 会漏
-        NULL 行→假拒答，故降级 body 扫描）。子串预筛为超集，下游 _boundary_hit
-        负责精确判定。
+        NULL 行→假拒答，故降级 body 扫描）。下游 _boundary_hit 负责精确判定。
+
+        blob 只含 FM 层文本（检索层无正文——设计铁律）：crit 词若只落在正文，
+        LIKE 圈不出其所在文件 → 本函数返回空时【不可当作语料真缺】——调用方
+        _corpus_top_term_hit_files 的最终判定域是 body（read_body + _boundary_hit），
+        故空候选降级 _corpus_files 全量列表，正文词的命中判定交由 _boundary_hit
+        在真正文上完成（打捞口径，与 _entity_in_corpus / _rare_entities 同源）。
         """
         # 仅当列已存在【且】已全行填充才走 SQL 快速路径；旧库未 rebuild 时
         # search_blob 全 NULL，LIKE 会静默漏 NULL 行→假拒答，故降级 body 扫描。
@@ -356,7 +381,10 @@ class _MechanicalLayer:
         if pid:
             sql += " AND (package_id=? OR package_id LIKE ? || '/%')"
             params += [pid, pid]
-        return [r[0] for r in c.execute(sql, params).fetchall()]
+        rows = [r[0] for r in c.execute(sql, params).fetchall()]
+        # blob（FM 层）零命中：词可能只在正文 → 降级全量文件列表，交给下游
+        # _boundary_hit 在真正文上判定（正文按需打捞，检索层不预存正文）。
+        return rows if rows else self._corpus_files(pid)
 
     def _entity_in_corpus(self, term, pid=None):
         """判别实体是否真在语料（正文 OR 锚点文本任一出现即算有）。

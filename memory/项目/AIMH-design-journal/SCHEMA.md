@@ -72,7 +72,7 @@ anchors:
     about: "§6 指向推导/哲学/实现类细则文档索引（存储架构总览、召回消歧管线、数学与语言哲学思路、什么是AIMH系统等），本文件只写落库与 lint 契约，细则见各文档。"
     keywords: ["细则索引", "推导", "哲学", "实现", "存储架构总览", "召回消歧"]
 pkage_created: 2026-08-14
-pkage_updated: 2026-08-29
+pkage_updated: 2026-09-02
 ---
 
 # AIMH 设计规范（落库与校验唯一真相源）
@@ -184,7 +184,7 @@ anchors:
     about: "该节概述短答（自然语言一句，可直答这章讲什么）"
     keywords: ["2005", "曼哈顿", "示例信物", "宝石", "示例角色"]
 pkage_created: 2026-08-14
-pkage_updated: 2026-08-14
+pkage_updated: 2026-09-02
 ---
 
 # <标题>
@@ -232,7 +232,7 @@ pkage_updated: 2026-08-14
 
 | 命名空间 | 落点 | 特殊约定 |
 |---|---|---|
-| daylog | `memory/日志/` | 一天一包，日期即主键；只索引不存正文，权威叙事在主题包 |
+| daylog | `memory/日志/` | 一天一包，日期即主键；检索层不存正文（blob=FM 层文本，正文按需打捞）；anchors 每 beat 一锚点，keywords 数量从简但不为空（daylog 口径豁免通用 5 维），规矩见 daylog设计.md |
 | project | `memory/项目/` | README 式功能拆包（需求清单 / 项目结构 / 开发日志 / 约定 各成 md） |
 | OC | `memory/原创角色/` | base（必有仅 1）／ origin（默认必有）／ ext（有则分） |
 | 对话 | `memory/对话/` | `summary`=背景；`##对话原文`＋`##关键内容`；`tags` 由关键内容派生 |

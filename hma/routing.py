@@ -17,42 +17,28 @@
 
 ## 路由层（resolve_scope 统一入口，返回 (package_id|None, confident:bool)）
 
-  别名/缩写/英文全称**一律写在 FM 四要素**（person/topic 变体 dict），由引擎经
-  `_kw_index`（锚点 keywords 派生）+ `_build_index`（目录名/标题）结构性读取——
-  新包进仓库自动获得判别力，代码层**不保留任何手写别名硬锁表**（SUBJECT_SCOPE
-  已于 2026-08-24 删除，因其违反 SCHEMA.md §2.3「别名折四要素」契约）。
+别名/缩写/英文全称**一律写在 FM 四要素**（person/topic 变体 dict），由引擎经
+`_kw_index`（锚点 keywords 派生）+ `_build_index`（目录名/标题）结构性读取——
+新包进仓库自动获得判别力，代码层不保留任何手写别名硬锁表。
 
-  ①（已废弃）原 SUBJECT_SCOPE 手写别名硬锁层 —— 删除，别名改走 FM 四要素。
-  ② 关键词补齐（kw_index，锚点 keywords + FM 四要素变体派生）—— 软信号：查询
-     命中某包 Specific 内容词/别名仅加权（+4），**绝不**硬锁。原因：锚点 keyword
-     含「检索 / 理解 / ai」等泛词，命中 demo 包等会触发灾难性误锁（T08 曾因此锁到
-     `样式demo/demo-Project`）。泛词无法承载「锁包」置信度，故只做软聚焦。
-  ③ 目录名 / 标题结构匹配（_build_index）—— 软信号（权重 3/2），易碰撞（如「哲学」），
+两层软信号（均汇入同一 scores 字典取 max，顺序不影响结果）：
+  ① 关键词补齐（kw_index，锚点 keywords + FM 四要素变体派生）—— 查询命中某包
+     内容词/别名仅加权（+4），**绝不**硬锁。原因：锚点 keyword 含「检索 / 理解 /
+     ai」等泛词，命中 demo 包等会触发灾难性误锁。泛词无法承载「锁包」置信度。
+  ② 目录名 / 标题结构匹配（_build_index）—— 权重 3/2，易碰撞（如「哲学」），
      同样**绝不**硬锁，交由全库检索 + 伞包降权兜底。
 
-**hard 锁 vs 全库的分界（confident 标志）**：`resolve_scope` 现在**不再返回
-confident=True**（①别名硬锁层已删），恒为 `False` → 永远退全库检索 + 伞包降权兜底，
-谁都不预先排除，避免错锁把正确答案所在包直接砍掉（旧实现 T08/T12 误锁「哲学」包、
-T08 误锁 demo 包皆此因）。若要让某包的关键词真正「硬桥接」（如 design-journal 的
-「双轴框架 / 负载轴」），正确做法是把这些**具体**词写入该包锚点的 `keywords` 字段
-或 FM 四要素变体（语料层内容补全），而非依赖代码层硬锁——属内容修复，不在路由层。
+**confident 恒为 False**：两层都是软信号，故 `resolve_scope` 永远返回
+`confident=False` → 调用方退全库检索 + 伞包降权兜底，谁都不预先排除，避免错锁
+把正确答案所在包直接砍掉。调用方显式传入的 `package_id` / `scope` 仍始终硬过滤
+（尊重调用方界定的检索空间）。若要让某包的关键词真正「硬桥接」（如 design-journal
+的「双轴框架 / 负载轴」），正确做法是把这些**具体**词写入该包锚点的 `keywords`
+字段或 FM 四要素变体（语料层内容补全），而非依赖代码层硬锁——属内容修复，不在路由层。
 """
 import io
 import os
 import re
 from typing import Dict, Optional, Set
-
-# ---------------------------------------------------------------------------
-# ★ 2026-08-24 删除 SUBJECT_SCOPE 手写别名表
-# ---------------------------------------------------------------------------
-# 原代码在此维护一张手写别名→包 的硬锁表（hma/cema/demo-char…），违反 SCHEMA.md
-# §2.3「别名折四要素 dict、禁独立 aliases 字段」契约，也背离模块 docstring 第 8-12
-# 行"判别词结构性来自目录名/标题/锚点 keywords、无需手写表"的承诺。用户质问
-# "别名不写 FM 单独弄个表是什么意思"——正确做法：别名/缩写/英文全称一律写在
-# 对应包的 FM 四要素（person/topic 变体 dict）里，引擎经 _kw_index / 结构路由
-# 确定性读取，新包自动获得判别力，零打地鼠。代码层不再保留任何手写别名硬锁源。
-# resolve_scope 现在只有②③软信号层，恒返回 confident=False（退全库+伞包降权兜底）。
-SUBJECT_SCOPE = {}  # 已废弃：别名折进 FM 四要素。保留空字典仅防导入侧 KeyError。
 
 # ---------------------------------------------------------------------------
 # ② 结构路由：扫记忆根，目录名末段 + 包标题 作判别
@@ -117,25 +103,20 @@ def resolve_scope(q, memory_root: Optional[str] = None,
                   kw_index: Optional[Dict[str, Set[str]]] = None):
     """查询 → 作用域（包目录 package_id）统一入口，供 query_anchors 缩圈用。
 
-    返回 ``(package_id | None, confident: bool)``：
-      - ``confident=True``（仅① 别名命中）→ 调用方应**硬锁**候选池到该包；
-      - ``confident=False``（② 关键词补齐 / ③ 目录名·标题弱匹配）→ 退全库检索
-        （不硬锁，避免泛词误锁排除正解；软信号仅作排序加权）。
+    返回 ``(package_id | None, confident: bool)``：``confident`` 恒为 ``False``
+    （两层都是软信号）→ 调用方退全库检索，不硬锁（避免泛词误锁排除正解），
+    soft target 仅作排序加权。
 
-    三层（逻辑分层，非执行先后——②③ 均汇入同一 scores 字典取 max，顺序不影响结果）：
-      ① SUBJECT_SCOPE 别名（强置信）→ 直接返回。
-      ② 关键词补齐（kw_index，各包锚点 keywords 派生，结构性非手写）→ 软加权（+4），
+    两层（逻辑分层，非执行先后——均汇入同一 scores 字典取 max，顺序不影响结果）：
+      ① 关键词补齐（kw_index，各包锚点 keywords 派生，结构性非手写）→ 软加权（+4），
          不触发硬锁（泛词如「检索」会误锁 demo 包）。
-      ③ 目录名末段（权重 3）/ 标题 token（权重 2）结构匹配 → 仅计分，不单独触发硬锁。
-    最终取加权最高包；但 ``confident`` 恒为「是否命中别名」——②③ 一律 False。
+      ② 目录名末段（权重 3）/ 标题 token（权重 2）结构匹配 → 仅计分，不单独触发硬锁。
+    最终取加权最高包作为软聚焦 target；硬过滤只认调用方显式传入的 package_id / scope。
     """
     ql = str(q).lower()
-    # 注：原①别名硬锁层已删除（SUBJECT_SCOPE 废弃，别名折进 FM 四要素）。
-    # 现仅②③软信号层：别名经 FM 四要素被 _kw_index / _build_index 结构性读取，
-    # 无需代码层手写硬锁；confident 恒为 False → 退全库 + 伞包降权兜底。
     if not memory_root:
         return (None, False)
-    # ③ 目录名 / 标题结构匹配（弱置信计分）
+    # ② 目录名 / 标题结构匹配（软信号，权重 3/2）
     idx = _build_index(memory_root, valid_pids)
     scores: Dict[str, float] = {}
     for pid, toks in idx.items():
@@ -146,7 +127,7 @@ def resolve_scope(q, memory_root: Optional[str] = None,
                 s += 3.0 if t in tail else 2.0
         if s:
             scores[pid] = scores.get(pid, 0) + s
-    # ② 关键词补齐（锚点 keywords，内容级消歧，权重 4）
+    # ① 关键词补齐（锚点 keywords，内容级消歧，权重 4）
     kw_hit = False
     for t, pids in (kw_index or {}).items():
         if t and t in ql:
@@ -156,8 +137,7 @@ def resolve_scope(q, memory_root: Optional[str] = None,
     if not scores:
         return (None, False)
     best = max(scores, key=lambda p: scores[p])
-    # 强置信（confident）恒为「是否命中①别名」——②③ 的关键词补齐 / 目录名匹配
-    # 一律 soft-only、绝不硬锁：泛词（检索 / 理解 / ai）命中 demo 等包会触发灾难性
-    # 误锁（T08 曾锁到 样式demo/demo-Project）。硬锁权完全交给别名层；其余退全库 +
-    # 伞包降权兜底。best 仍作为软聚焦 target 候选，但调用方仅在 confident 时硬用。
+    # 两层信号一律 soft-only、绝不硬锁：泛词（检索 / 理解 / ai）命中 demo 等包
+    # 会触发灾难性误锁，且错锁会把正确答案所在包直接砍掉。best 仅作软聚焦
+    # target；硬过滤只认调用方显式传入的 package_id / scope。
     return (best, False)

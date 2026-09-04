@@ -255,6 +255,7 @@ python scripts/core/migrate_codex_memory.py   --root memory --namespace 其他
 - **拒答层 V1.0 已落地**（四道闸 + `corpus_missing_entity` 硬拒，`allow_abstain` 默认开）
 - **QueryEnvelope 契约已落地**（MCP 边界强制 `q`/`keywords`/`mode`，多问扇出 `sub_queries`、枚举 `list_all_in_scope`）
 - 技能作为即插即用客户端 + 常驻主动触发技能（aimh-always）
+- 技能挂载到客户端发现位（如 junction `~/.zcode/skills` → 项目 `skills/`）后穿透生效，但 **Skill 可用列表在会话启动时固定——挂载后需新开会话**才出现在技能菜单；当轮可读 SKILL.md 照规程等效执行
 
 **基准评测（已跑通真实数据闭环）**：
 

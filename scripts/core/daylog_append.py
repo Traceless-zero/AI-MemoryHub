@@ -459,9 +459,16 @@ def _set_summary(text, summary):
     return text, False
 
 
-def build_beat(seq, title, time_str, touched, linked, tags, body):
+def build_beat(seq, title, time_str, touched, linked, tags, body,
+               touched_code=None, code_intent=None):
     parts = ["### %02d · %s · %s" % (seq, title, time_str)]
     parts.append("- touched: [%s]" % ", ".join(touched))
+    # code-change 契约（见 aimh-daylog-archive 的「工程改动增补规约」）：代码类改动追加指针行，
+    # 让继任 AI 读指针而非通读源码。非 FM 字段，不进 fail-closed 校验。
+    if touched_code:
+        parts.append("- touched_code: [%s]" % ", ".join(touched_code))
+    if code_intent:
+        parts.append("- code_intent: %s" % code_intent)
     body = body.strip("\n")
     if body.strip():
         parts.append(body)
@@ -479,6 +486,11 @@ def main(argv=None):
     ap.add_argument("--title", required=True, help="一句标题")
     ap.add_argument("--touched", default="", help="逗号分隔的文件/包路径")
     ap.add_argument("--linked", default="", help="关联记忆包/文件 id")
+    ap.add_argument("--touched-code", dest="touched_code", default="",
+                    help="code-change 契约：逗号分隔代码指针 <repo相对路径>:<符号>@<commit>"
+                         "（如 extract_flow_ts.py:relayout@abc123）；非 FM 字段，不进校验")
+    ap.add_argument("--code-intent", dest="code_intent", default="",
+                    help="code-change 契约：一句 to-be 意图（为什么改/要达到什么），非 FM 字段")
     ap.add_argument("--tags", default="", help="逗号分隔主题词（进 beat 标记；FM tags 恒为 [daylog, 日期] 底座）")
     ap.add_argument("--topic", action="append", default=None,
                     help="daylog FM topic 规范名（规矩 2/3）：格式 '规范名|变体1,变体2'，可重复；"
@@ -516,6 +528,8 @@ def main(argv=None):
     touched = [t.strip() for t in args.touched.split(",") if t.strip()]
     tags = [t.strip() for t in args.tags.split(",") if t.strip()]
     linked = args.linked.strip()
+    touched_code = [t.strip() for t in args.touched_code.split(",") if t.strip()]
+    code_intent = (args.code_intent or "").strip()
 
     root = repo_root()
     path = _daylog_path(root, date)
@@ -564,7 +578,8 @@ def main(argv=None):
         lines = text.splitlines()
 
     seq = _next_seq(lines)
-    beat = build_beat(seq, args.title.strip(), time_str, touched, linked, tags, body)
+    beat = build_beat(seq, args.title.strip(), time_str, touched, linked, tags, body,
+                      touched_code=touched_code, code_intent=code_intent)
 
     head = lines[:pos]
     tail = lines[pos:]

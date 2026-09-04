@@ -36,10 +36,10 @@ anchors:
     about: "迁移步骤：把现有 项目/AIMH/开发日志.md 的手写详实内容按日期回搬进对应 daylog 的 beat 块（一次性逐日确认）→ 回搬完成后开发日志.md 转纯派生（脚本重新生成）→ 此后详实内容只写 daylog。"
     keywords: ["迁移", "开发日志.md回搬", "beat块", "纯派生", "逐日确认"]
   - Chapter: "开放问题"
-    about: "开放问题：beat 块锚点 keywords 5 维契约对小条目偏严，daylog 锚点主要靠 Chapter+about 召回、keywords 允许从简；主题索引.md 规模随 daylog 数量线性涨，需要时再考虑按季度切分。"
-    keywords: ["开放问题", "5维偏严", "keywords从简", "主题索引规模", "季度切分"]
+    about: "开放问题：beat 块锚点不满足通用 5 维契约（lint 与 validate_fm 的 daylog 口径豁免），锚点靠 Chapter+about 召回、keywords 数量从简但不为空（规矩五：由 AI --anchor-keywords 必填提供）；主题索引.md 规模随 daylog 数量线性涨，需要时再考虑按季度切分。"
+    keywords: ["开放问题", "5维豁免", "keywords从简", "主题索引规模", "季度切分"]
 pkage_created: 2026-08-15
-pkage_updated: 2026-08-29
+pkage_updated: 2026-09-02
 ---
 
 # daylog 设计
@@ -98,9 +98,13 @@ AI 与脚本职责切分：
 | 正文写作（事实/决策/改动） | AI |
 | `touched` 内容 | AI 显式传入（事实观察，非路由判断） |
 | `linked` / `tags` 打标 | AI（廉价、错了代价低、可事后改） |
+| 锚点 about（`--anchor-about`）与锚点 keywords（`--anchor-keywords`） | **AI 必填**（铁律：语义填写，机械填充被禁止；缺则 error 不落盘） |
+| FM summary（`--summary`） | **AI 必填**（新建时；当天真概要，不得落套话） |
 | 文件创建（含 FM-V2 骨架） | 脚本 |
 | 序号自增、时间戳 | 脚本 |
 | touched 存在性校验 | 脚本 |
+| FM anchors 同步追加（Chapter 机械=beat 标题）、linked 并入、topic 合并、tags 底座 | 脚本 |
+| 落盘前 validate_fm 终检（fail-closed，不过不落盘） | 脚本 |
 | 归置/路由判断 | **没有人做**（不存在这一步） |
 
 落地为 `scripts/core/daylog_append.py`：
@@ -109,12 +113,12 @@ AI 与脚本职责切分：
 python daylog_append.py --title "修了 query_anchors 中文参数" \
   --touched "hma/server.py,hma/hma_core.py" \
   --linked "项目/AIMH/开发日志" --tags "读取链路,MCP" \
+  --summary "当天真概要（可选）" \
+  --anchor-about "本 beat 特征化摘要（可选）" \
   --body-file 正文.md        # 或 stdin
 ```
 
-行为：当天 daylog 不存在则按模板新建 → 扫描最大序号 → 追加 beat 块（脚本拼序号/时间戳/beat 注释）→ 校验 touched → 输出追加结果。AI 不经手 front-matter，daylog 的 FM 字段由脚本维护，`pkage_updated` 每次追加自动刷。
-
-行为：当天 daylog 不存在则按模板新建 → 扫描最大序号 → 追加 beat 块（脚本拼序号/时间戳/beat 注释）→ 校验 touched → 输出追加结果。AI 不经手 front-matter，daylog 的 FM 字段由脚本维护，`pkage_updated` 每次追加自动刷。
+行为：当天 daylog 不存在则按模板新建 → 扫描最大序号 → 追加 beat 块（脚本拼序号/时间戳/beat 注释）→ 校验 touched → 同步 FM（锚点追加/linked 并入/topic 合并/tags 强制）→ 输出追加结果。AI 不经手 front-matter 落盘，daylog 的 FM 字段由脚本机械维护，`pkage_updated` 每次追加自动刷。
 
 ## daylog FM 规矩（2026-08-29 定稿）
 
@@ -126,6 +130,16 @@ python daylog_append.py --title "修了 query_anchors 中文参数" \
 4. **治理兜底**：存量空 topic 的 daylog 由蒸馏/对齐补齐（08-15 为范本；08-27 空壳无内容诚实保留）。
 
 落地：`daylog_append.py --topic`（可重复）+ 追加时的 topic 合并与 tags 底座强制。规模基准（`什么是AIMH系统.md` §九）在 daylog 三包对齐后两级/全局均 100%@5。
+
+## daylog FM 规矩五（2026-09-02 补）：FM 与正文同步追加 + fail-closed
+
+动机：daylog-08-15 范本对齐后确立"每条 beat 一个锚点"的形态，但 append 只写正文、FM anchors 不跟随——锚点逐拍落后于 beat（09-02 当天即复现），且 FM linked 恒空、summary 恒为套话。第五条规矩把 FM 维护收进追加动作本身，并**对齐 new_package --fill 的 fail-closed 口径**（此前 daylog 游离在该体系外是缺口）：
+
+1. **anchors 同步追加**：每次追加必同步追加本 beat 锚点。`Chapter` 机械=beat 标题（`NN · 标题 · 时间`，与正文 `###` 逐字一致，保证 `read_section` 定位）；`about` 由 AI `--anchor-about` 语义提供；`keywords` 由 `--anchor-keywords` 提供（**不从 `--tags` 机械搬运**——tags 是 beat 主题词，keywords 是锚点检索词，语义角色不同）；同 `Chapter` 幂等跳过。锚点统一以 block 换行式落盘（引擎块感知解析器兼容，fm_only 快路径生效 → blob 不含正文，死令 1 口径）。
+2. **fail-closed 写前门禁（铁律：FM 内容必须 AI 语义填写，机械填充被禁止）**：缺 `--anchor-about`、缺 `--anchor-keywords`、新建缺 `--summary`、空 `--body`——**一律 error 拒绝落盘，无任何机械兜底**。宁可缺、不可脏；责任在写入侧自己补齐后重跑。
+3. **落盘前权威终检**：从拼装完成的最终文本回读 FM，跑 `validate_fm(daylog=True)`（唯一权威校验；daylog 口径仅豁免锚点双通道 5 维——与 lint_memory 的 daylog 跳过同源——其余契约全跑），不过不落盘。
+4. **`--linked` 双落**：进 beat 标记（既有行为）同时并入 FM `linked` 字段（去重）。
+5. **总锚点（"流水"）不归 append**：概括全天的"流水"总锚点属 AI 语义工作（日终蒸馏/对齐时补），脚本只在新建时给出空 anchors，不机械生成泛化总锚点。
 
 ## 派生视图
 
@@ -167,5 +181,5 @@ python daylog_append.py --title "修了 query_anchors 中文参数" \
 
 ## 开放问题
 
-- beat 块的锚点 keywords 5 维契约对小条目偏严，daylog 锚点主要靠 Chapter+about 召回，keywords 允许从简。
+- beat 块的锚点不满足通用 5 维契约（lint 与 validate_fm 的 daylog 口径豁免，2026-09-02）：锚点靠 Chapter+about 召回，keywords 数量从简但不为空（规矩五：AI 记账时 `--anchor-keywords` 必填提供）。
 - 主题索引.md 的规模随 daylog 数量线性涨，需要时再考虑按季度切分。

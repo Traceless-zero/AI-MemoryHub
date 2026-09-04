@@ -49,21 +49,13 @@ def _expand(base_terms, q):
 def dict_refine_decomposer(memory, q, context=None):
     """零-ML REFINE 兜底 decomposer。
 
-    先用引擎默认理解层（`_understand_query`，四要素 grounding + CJK 二元）把
-    自然语言压成基础检索词，再按 SYNONYM_DICT 扩充常识关联词。返回词列表直接
-    喂给 `query_anchors` 当 terms。
+    先按空白把查询切成基础检索词，再按 SYNONYM_DICT 做常识桥接（表层词 → 语料里
+    真实存在的主题词）。返回词列表直接喂给 `query_anchors` 当 terms。
 
     生产 REFINE 应由 LLM 替换：LLM 凭世界知识一步把「最值钱」映射到「宝石」，
     比本词典更泛化、更准——但本函数保证无模型时管线闭环。
     """
-    base = []
-    if hasattr(memory, "_understand_query"):
-        try:
-            base = memory._understand_query(q, context=context) or []
-        except Exception:
-            base = []
-    if not base:
-        base = [t for t in q.lower().strip().split() if t]
+    base = [t for t in q.lower().strip().split() if t]
     return _expand(base, q)
 
 

@@ -28,16 +28,9 @@ from datetime import date, timedelta
 from . import routing
 from . import scoring_coeffs as C
 from . import recall_obscure as ro
-"""AIMH 确定性拒答/重排层（从 hma/mechanical.py 迁入）。
 
-原 mechanical.py 的「机械查询理解流」(_understand_query / _reform_terms 的 CJK 二元
-拆词兜底) 已按铁律删除：召回只走 AI 流（query_anchors(keywords=[实体词])）。
-本层只保留零-ML 的确定性拒答闸 / 语料包含性重排 / 覆盖度计算，全部为可重建确定性逻辑。
-"""
-import os
-import re
-import json
-
+# 查询归一共用的标点集与英文功能词表：机械兜底路径（normalize_terms 按 [+\s] 切分后
+# strip 标点、滤功能词）与垃圾二元判定（_is_garbage_bigram）共用。
 _PUNCT = " \t\r\n\"'`,.;:!?()[]{}<>/\\|@#$%^&*+=~_" + \
          "\u201c\u201d\u2018\u2019\u3001\u3002\uff0c\uff1b\uff1a\uff01\uff1f" + \
          "\uff08\uff09\u300a\u300b\u300c\u300d\u3010\u3011\u2026\u2014\u2013"
@@ -588,7 +581,7 @@ class _MechanicalLayer:
             return scored
         # 判别词表：剔除两类「撑阈值不撑命中」的 term——
         # ① 垃圾二元（是什/么类/型的/的记：滑动窗口碎词，语料罕见→IDF 虚高）；
-        # ② 长中文整句串（len>4：_reform_terms 保留的整问句，锚点永远精确命中不了，
+        # ② 长中文整句串（len>4：机械切分保留的整问句，锚点永远精确命中不了，
         #    只把 w_total/thr 顶高，如「是哪几个铁律」idf=3.5）。
         # 二者都让跨包常见真词（架构/记忆/铁律，IDF 低）被误滤（design-journal 误拒根因）。
         # 仅作用于阈值计算；BM25 召回仍走完整 terms（不动召回）。
@@ -601,7 +594,7 @@ class _MechanicalLayer:
             return scored
         thr = theta * w_total
         # 自归一锚点：查询中判别力最强的单 term IDF，用作「命中判别词即保」的底线。
-        # 治 over-abstain 根因：_understand_query 的四要素 grounding 会把稀有变体
+        # 治 over-abstain 根因：理解层 grounding 会把稀有变体
         # (如 黄蓝色的宝石/蓝钻/深海蓝橙焰钻石/那颗钻石) 注入 terms，其 IDF 撑高
         # w_total→thr 极高；而锚点只命中 宝石/示例信物 这类真判别词(rel 远<thr)
         # 被误删→empty_pool 过度拒答。补「锚点确含任一高判别实体词即保」通道：
@@ -661,8 +654,8 @@ class _MechanicalLayer:
         # 反相拒答闸（治本，仅 AI 接口模式启用）：查询含稀有判别实体，但语料
         # 正文/锚点【任一都查不到】→ 域内确无该实体 → 直接拒答。补上
         # corpus_hit_rerank「有命中才放行」缺失的半边。
-        # 仅当 terms 来自 AI 接口(keywords/decomposer) 时启用：机械拆词
-        # (_understand_query) 抽不出『量子计算/回旋镖』这类复合实体，稀有过滤
+        # 仅当 terms 来自 AI 接口(keywords/decomposer) 时启用：机械切分
+        # (normalize_terms) 抽不出『量子计算/回旋镖』这类复合实体，稀有过滤
         # 又会误剔真正在语料的实体（如 回旋 被设计文档举例引用而 >8% 文件 →
         # 误判缺失 → 过拒），故机械兜底路径不启用此闸，退回 coverage/out_of_scope
         # （G7 漏拒作为已知弱点，不阻断回归门）。真·功能接口在 AI 传复合关键词时
@@ -1188,7 +1181,7 @@ def _anchor_score(at, asum, atags, abody, ql, terms, w):
 
 def _search_blob(pkg):
     """构造小写可检索 blob（标题+四要素+tags+linked+各锚点 Chapter/about/keywords+body），
-    供 query_anchors / _understand_query 以 SQL LIKE 做【语义等价】候选预筛，
+    供 query_anchors 以 SQL LIKE 做【语义等价】候选预筛，
     取代逐行全扫+json.parse+逐锚点切章。LIKE '%term%' 命中的行，必含会被
     _anchor_score 子串匹配得分的锚点（超集）→ 预筛零召回回归。"""
     parts = [pkg.title or "", pkg.summary or ""]
@@ -2845,20 +2838,13 @@ class Memory(_MechanicalLayer):
         跨包广检索（想让 top_k 覆盖 k 个不同事件）时才置 True。
 
         reform=True（默认开）→ 先经「理解层 L1.5」把自然语言问句压成规范关键词，
-        再做确定性匹配。默认理解层 = self._understand_query（零-ML）：四要素字段
-        grounding（问句/context 命中本仓 person/topic/event_date/location 的规范名
-        或变体，即把规范名当检索词，变体提问也能接地）+ _reform_terms 内容词兜底
-        （CJK 二元 + 英文去噪）。无模型、可由正文重建，对应 HMA 理解层/L2 的查询
-        分解职责。等价于 locomo_bench.reform() 的确定性部分。
-
-        decomposer= 可注入调用方提供的理解层（如 LLM 语义分解）：传入 callable
-        时，reform=True 改为调用 decomposer(self, q, context=context) 取关键词，
-        引擎自身绝不调用任何模型（保持零-ML 契约）；不传则用默认确定性理解层。
-
-        keywords= 是**最直截的真·功能接口**：AI 理解层先把自然语言问句解析成
-        规范实体词列表，直接经此参数传入（优先级高于 decomposer 与机械拆词）。
-        这是「AI 负责理解、引擎负责确定性检索与拒答」契约的落点；无 AI 接线时
-        才退化到 _understand_query 的机械 CJK 二元兜底，不靠它硬顶召回/拒答。
+        再做确定性匹配。三条取词路径，优先级从高到低：
+          · keywords=（最优路径，AI 流）：AI 理解层先把 NL 解析成规范实体词列表
+            直接传入，引擎零-ML 契约的落点；
+          · decomposer=（可注入理解层）：传 callable 时调用它取关键词，引擎自身
+            绝不调用任何模型；
+          · 前两者皆无 → 退化到机械切分兜底 normalize_terms（按 [+\\s] 切分、strip
+            标点、滤英文功能词），仅保证无 AI 接线时工具仍可用，不靠它硬顶召回与拒答。
 
         idf=True（默认开）→ 逐词计分乘以该词的 IDF 权重（稀有词权重高、常见
         词权重低），削弱 "the/when/did" 这类处处都有的功能词把判别词信号淹没。
@@ -2888,12 +2874,11 @@ class Memory(_MechanicalLayer):
         if keywords is not None:
             # 真·功能接口：AI 理解层解析出的关键词直接传入（最优路径）。
             # 引擎零-ML——实体抽取/消歧由 AI 负责，引擎只做确定性检索与拒答；
-            # 机械拆词(_understand_query) 仅在没有 AI 接线时的兜底，不靠它硬顶。
+            # 机械切分(normalize_terms) 仅在没有 AI 接线时的兜底，不靠它硬顶。
             # 归一小写：下游 _anchor_score / _apply_field_weights / _coverage /
             # _corpus_top_term_hit_files 全按小写匹配（锚点文本与四要素字段已
             # .lower()），AI 传入原大小写关键词会致子串匹配全失（如 "CEMA"
-            # 命中不了小写 "cema" → 0 召回）。机械路径能命中，是因
-            # _understand_query 额外产出小写变体；此处直接归一，省去变体依赖。
+            # 命中不了小写 "cema" → 0 召回），故此处统一归一。
             terms = [str(k).lower() for k in keywords]
             ql = " ".join(terms) if terms else q.lower().strip()
         elif reform:
@@ -2917,13 +2902,11 @@ class Memory(_MechanicalLayer):
             return []
         c = self._conn()
         pid = self.package_id if package_id is None else package_id
-        # ② 检索策略：**别名硬锁 + 全局先捞全 + 伞包降权**。
+        # ② 检索策略：**全局先捞全 + 伞包降权**（自动路由只作软聚焦，从不硬锁）。
         # 自动路由 resolve_scope 返回 (scope_pid, confident)：
-        #   - confident=True（仅命中① SUBJECT_SCOPE 别名：hma/cema/demo-char 等）→
-        #     把候选池**硬锁**到该包（窄池、快、无伞包噪声，且别名无碰撞故不误锁）；
-        #   - confident=False（② 关键词补齐 / ③ 目录名·标题弱匹配，泛词易碰撞）→
-        #     **退全库检索**，由下游伞包降权兜底，谁都不预先排除（修 T08/T12 误锁、
-        #     T08 误锁 demo 包）。关键词补齐是软信号（仅 +4 加权、绝不硬锁），因锚点
+        #   - confident 恒为 False（关键词补齐 / 目录名·标题匹配都是软信号，泛词易碰撞）→
+        #     **退全库检索**，由下游伞包降权兜底，谁都不预先排除（避免误锁把正确答案
+        #     所在包直接砍掉）。关键词补齐是软信号（仅 +4 加权、绝不硬锁），因锚点
         #     keyword 含「检索/理解/ai」泛词，硬锁会灾难性误锁到 demo 等包。
         # 调用方显式 package_id / scope 永远硬过滤（尊重调用方界定的检索空间）。
         # 结构路由以 DB 真实 package_id 为权威（valid_pids）+ 锚点 keywords 派生
@@ -3613,13 +3596,13 @@ class Memory(_MechanicalLayer):
 
     @staticmethod
     def _score(ql, rid, title, summary, person_aliases, other_aliases, tags, anchor_aliases=None):
-        # 覆盖度模型（修包级累加 bug，对齐 mechanical.py L123 设计意图）：
+        # 覆盖度模型（修包级累加 bug）：
         # 同一查询词在本包多字段（title/alias/tag/summary）只取【最高命中档】加一次，
         # 不再逐字段累加，避免长/多字段文档靠堆词虚高（如「主义」二元碎片在四字段各加一次）。
         # person alias 精确匹配高杠杆（PKG_PERSON_ALIAS_EXACT=BASE_UNIT×1.0×1.0=150，
         # 高于 PKG_TITLE_SUBSTR=BASE_UNIT×0.8×0.4=48），落实「常用名优先」。
         # 注：注释原写 200/60 系 BASE_UNIT=200 时代遗留，BASE 改 150 后已同步常量、此注释一并更正。
-        # 垃圾二元（mechanical._is_garbage_bigram）只给极小分，不靠命中数虚高。
+        # 垃圾二元（_is_garbage_bigram）只给极小分，不靠命中数虚高。
         terms = normalize_terms(ql)
         if not terms:
             return 0
@@ -3666,7 +3649,7 @@ class Memory(_MechanicalLayer):
             # summary 命中
             if any(t in sum_l for t in terms):
                 best = max(best, C.PKG_SUMMARY_SUBSTR)
-            # 垃圾二元只给极小分（mechanical.py L127 精神）
+            # 垃圾二元只给极小分
             if _is_garbage_bigram(t):
                 best = min(best, C.PKG_GARBAGE_BIGRAM) if best else C.PKG_GARBAGE_BIGRAM
             s += best

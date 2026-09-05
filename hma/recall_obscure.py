@@ -121,10 +121,6 @@ def chapter_slice(body, chapter_title, start, end):
     return chap_text[cs:ce]
 
 
-# ---------- dK 裁切基准派生（设计稿，当前生产未采用） ----------
-def cutoff_from_base(base_unit):
-    """设计派生式：裁切基准 = 基线一半。当前生产 CUTOFF_GAP_FLOOR 独立=75（不从 BASE 派生）。"""
-    return base_unit * 0.5
 
 
 # ---------- dK 瀑布裁切（与 hma_core._rerank 内联版行为一致） ----------
@@ -138,46 +134,3 @@ def waterfall_cut(entries, floor):
     return entries
 
 
-# ---------- 50 vs 75 真实 hit@5 对比（来自 sandbox_dk_cutoff_compare.py） ----------
-def compare_cutoff_50_75(memory_root, legit, top_k=5):
-    """CUTOFF_GAP_FLOOR 50 vs 75 真实 hit@5 对比（Demo 20 可答校准集）。
-
-    返回 (h50, h75, diff, diff_rows)。会临时 monkey-patch C.CUTOFF_GAP_FLOOR
-    （仅内存，不写文件）；_rerank.waterfall_cut 在 L2794 用同一模块属性，patch 后实时生效。
-    仅打印 top5 包序因阈值改变而不同的题（由调用方负责展示）。
-
-    判读：两 floor 下 hit@5 相同且 0 题变化 → 干净 bench 对 50/75 无区分度，
-          阈值维持 75（保守、不误杀弱相关）更安全。
-    """
-    from .hma_core import Memory
-
-    def hit5_for(floor):
-        C.CUTOFF_GAP_FLOOR = floor
-        m = Memory(memory_root)
-        rows = []
-        hit = 0
-        for q, exp_pkg, exp_kw in legit:
-            hits = m.query_anchors(q, top_k=top_k, keywords=[q])
-            pids = []
-            if isinstance(hits, list):
-                for h in hits:
-                    pid = h[0] if isinstance(h, (tuple, list)) else h.get("package_id")
-                    title = h[1] if isinstance(h, (tuple, list)) else (h.get("title") or h.get("anchor") or "")
-                    pids.append((pid, title))
-            ok = any(str(pid).startswith(exp_pkg) and (exp_kw == "" or exp_kw in (t or ""))
-                     for pid, t in pids)
-            if ok:
-                hit += 1
-            rows.append((q, exp_pkg, exp_kw, pids, ok))
-        m.close()
-        return rows, hit
-
-    r50, h50 = hit5_for(50.0)
-    r75, h75 = hit5_for(75.0)
-    diff = 0
-    diff_rows = []
-    for (q, ep, ek, p50, ok50), (_, _, _, p75, ok75) in zip(r50, r75):
-        if [x[0] for x in p50] != [x[0] for x in p75]:
-            diff += 1
-            diff_rows.append((q, ep, ek, p50, p75, ok50, ok75))
-    return h50, h75, diff, diff_rows

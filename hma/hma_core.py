@@ -2684,16 +2684,6 @@ class Memory(_MechanicalLayer):
             self._idf_df[t] = max(0.0, math.log((self._idf_N + 1) / (n + 1)))
         return self._idf_df[t]
 
-    def _pkg_freq(self, t):
-        """term t 在多少个「包」中出现（子串匹配；文档=单包全部锚点拼合文本，
-        与 _build_idf 同口径、复用其懒构建结果）。供 grounding 反向门限用：
-        跨包越常见→越非判别→越不该被注入成检索词。t 为空返回 0。"""
-        if getattr(self, "_idf_docs", None) is None:
-            self._build_idf()
-        t = (t or "").lower()
-        if not t:
-            return 0
-        return sum(1 for d in self._idf_docs if t in d)
 
     # ---- 确定性 BM25 重排（query_anchors 的 rerank=True 模式）---------------
     # 无向量、可由正文重建，对应 HMA 理解层/L2 的排序职责。
@@ -3396,27 +3386,6 @@ class Memory(_MechanicalLayer):
         hits.sort(key=lambda x: -x[3])
         return hits[:top_k]
 
-    def query_two_hop(self, q, top_k=5, min_hit=2):
-        """两跳检索（用户订正后的正确流程，权威路径）：
-
-        跳1（L1.5 归一）：用 query_features 的特征重叠，把查询的【表面变体】
-              锁定到 canonical 精准词（如「黄蓝色宝石」→「示例信物」）。
-              features 在这里只干一件事：归一。不做召回。
-        跳2（L2 全文）：拿锁定到的 canonical 词，走【既有全文检索】
-              query_anchors(canon) 取精准段落。召回仍归全文检索，
-              不另起炉灶。
-
-        返回 (locked, searched)：
-          locked   = query_features 锁定的候选 [(pid,canon,reason,score)]
-          searched = 每个锁定 canonical 的全文检索结果
-                     [(pid,canon,reason,anchor_hits)]
-        """
-        locked = self.query_features(q, top_k=top_k, min_hit=min_hit)
-        searched = []
-        for pid, canon, reason, score in locked:
-            hits = self.query_anchors(canon, top_k=top_k)
-            searched.append((pid, canon, reason, hits))
-        return locked, searched
 
     # ---- 多跳召回：沿 linked 双向 BFS 扩簇（V1.0 生产化）-------------------
     def _linked_adjacency(self):

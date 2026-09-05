@@ -229,19 +229,3 @@ def parse_beats(body):
     return beats
 
 
-def filter_beats(pkg, q):
-    """精准搜寻型：在单日包的叙事段内做确定性关键词匹配。
-
-    匹配面 = 段叙事正文 + 该段 linked + 该段 tags（大小写不敏感子串）。
-    不打分、不排序（保持时间顺序）。无 q 则返回全部段。
-    """
-    ql = (q or "").lower().strip()
-    if not ql:
-        return parse_beats(pkg.body if pkg else "")
-    hits = []
-    for b in parse_beats(pkg.body if pkg else ""):
-        hay = (b["text"] + " " + " ".join(b["linked"])
-               + " " + " ".join(b["tags"])).lower()
-        if ql in hay:
-            hits.append(b)
-    return hits

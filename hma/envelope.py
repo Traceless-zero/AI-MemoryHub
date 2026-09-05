@@ -88,6 +88,3 @@ class QueryEnvelope:
         return dict(q=self.query, keywords=self.keywords,
                    scope=self.scope, allow_abstain=self.allow_abstain)
 
-    def resolve_kwargs(self) -> dict:
-        """映射到 resolve_query 入参（额外带 multihop）。"""
-        return dict(**self.engine_kwargs(), multihop=self.multihop)

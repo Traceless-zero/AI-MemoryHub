@@ -83,8 +83,4 @@ class QueryEnvelope:
         self.top_k = int(self.top_k if self.top_k is not None else 5)
         return self
 
-    def engine_kwargs(self) -> dict:
-        """映射到 query / query_anchors 通用入参。"""
-        return dict(q=self.query, keywords=self.keywords,
-                   scope=self.scope, allow_abstain=self.allow_abstain)
 

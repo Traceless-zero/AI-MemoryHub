@@ -48,8 +48,6 @@ def is_test(rel):
     return rel.startswith("scripts/tests/")
 
 
-def is_registry_handler(rel):
-    return rel.startswith("hma/engine/handlers/")
 
 
 def main(argv):
@@ -75,10 +73,13 @@ def main(argv):
                 print("[skip] 语法错误 %s: %s" % (rel, e))
 
     defs = defaultdict(list)       # name -> [(rel, lineno)]
+    decorated = set()              # 带装饰器的 def（框架托管：@register/@property 等）
     ref_files = defaultdict(set)   # name -> {引用它的文件 rel}
     for rel, tree in trees.items():
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.decorator_list:
+                    decorated.add(node.name)
                 if not (node.name.startswith("__") and node.name.endswith("__")):
                     defs[node.name].append((rel, node.lineno))
             # 一等公民引用也计数：set_defaults(func=cmd_x)、{name: _h_x}、@deco
@@ -101,15 +102,17 @@ def main(argv):
             continue
         callers = ref_files.get(name, set())
         if not callers:
-            buckets["孤儿候选"].append((name, sites[0][0], sites[0][1], ""))
+            # 零引用才看豁免：装饰器持有（@register 等）/宿主回调/孤儿
+            if name in decorated:
+                buckets["装饰器注册"].append((name, sites[0][0], sites[0][1],
+                                              "框架托管：装饰器持有引用"))
+            elif name.startswith(FRAMEWORK_NAME_PREFIXES) or name in FRAMEWORK_NAMES:
+                buckets["框架回调"].append((name, sites[0][0], sites[0][1], ""))
+            else:
+                buckets["孤儿候选"].append((name, sites[0][0], sites[0][1], ""))
         elif all(is_test(r) for r in callers):
             buckets["仅测试可达"].append((name, sites[0][0], sites[0][1],
                                           "调用: " + ", ".join(sorted(callers))))
-        elif (name.startswith(FRAMEWORK_NAME_PREFIXES)
-              or name in FRAMEWORK_NAMES):
-            buckets["框架回调"].append((name, sites[0][0], sites[0][1], ""))
-        elif all(is_registry_handler(rel) for rel, _ in sites):
-            buckets["注册表分发"].append((name, sites[0][0], sites[0][1], ""))
         else:
             n_prod += 1
 
@@ -117,11 +120,11 @@ def main(argv):
     print("扫描 .py %d 个；生产侧函数定义 %d 个（测试辅助函数不计）"
           % (n_files, len([n for n in defs
                            if not all(is_test(rel) for rel, _ in defs[n])])))
-    for cat in ("孤儿候选", "仅测试可达", "声明保留", "框架回调", "注册表分发"):
+    for cat in ("孤儿候选", "仅测试可达", "声明保留", "装饰器注册", "框架回调"):
         if buckets.get(cat):
             print("%s=%d" % (cat, len(buckets[cat])), end="  ")
     print("生产在役=%d" % n_prod)
-    for cat in ("孤儿候选", "仅测试可达", "声明保留", "框架回调", "注册表分发"):
+    for cat in ("孤儿候选", "仅测试可达", "声明保留", "装饰器注册", "框架回调"):
         if not buckets.get(cat):
             continue
         print("\n-- %s --" % cat)

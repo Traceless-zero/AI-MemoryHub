@@ -15,11 +15,11 @@
 - 任何异常 / 卡缺失 / 卡为空 → 静默 exit 0（fail-open，绝不阻塞会话）。
 - exit 2 保留给「故意阻断」，本脚本永不使用。
 
-工作区护栏（用户级 hook 对全工作区生效，2026-09-05 实证 workspace 级
-hooks 有信任门 config.project_hooks.pending_trust 会静默拦置，故迁用户级）：
-- 以 --project-dir ${ZCODE_PROJECT_DIR} 传入当前工作区，仅当落在本仓库内
-  才注入；其他工作区静默 exit 0。
-- 模板变量未展开（传入门面话 "${...}" 字面量）→ 视为无法判定 → 宁静默不误注。
+工作区口径（2026-09-05 定稿）：卡随人不随仓库，全场景注入——记忆是「人」级
+的（daylog 跨项目记账），全局对话无工作区 AGENTS.md，卡是唯一纪律载体。
+曾设仓库白名单护栏（AIMH 仓库 + 全局默认工作区放行、他仓库静默），经用户
+质疑后判定为过度保守，废除。--project-dir 仅作 trace 观测字段保留。
+若某类会话嫌吵，凭 trace 定位后按需再收敛（加回是一行事）。
 
 用法：
   python aimh_recall_card_hook.py                  # hook 模式（JSON 注入）
@@ -37,23 +37,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CARD = REPO_ROOT / "skills" / "aimh-recall" / "references" / "recall_card.md"
-
-
-def _in_aimh_workspace(project_dir):
-    """放行判据：AIMH 仓库内，或 ZCode 全局默认工作区（~/.zcode/workspace/*）。
-    全局对话是召回卡的主场景（无工作区 AGENTS.md，卡是唯一纪律载体）；
-    其他具体项目仓库仍静默，防误注。空值=无法判定，放行（兼容手工运行）。"""
-    if not project_dir:
-        return True
-    p = os.path.normcase(os.path.normpath(project_dir))
-    if p.startswith("${"):  # 模板变量未被展开 → 宁静默不误注
-        return False
-    repo = os.path.normcase(os.path.normpath(str(REPO_ROOT)))
-    if p == repo or p.startswith(repo + os.sep):
-        return True
-    zws = os.path.normcase(os.path.normpath(
-        os.path.expanduser("~/.zcode/workspace")))
-    return p == zws or p.startswith(zws + os.sep)
 
 
 def _load_card(path):
@@ -75,7 +58,7 @@ def _emit_json(text, wrapped):
 
 
 def _trace(project_dir, outcome):
-    """触发留痕：每次被 runner 调用都记一行（含被护栏拦下的），排查 hook 是否真触发。"""
+    """触发留痕：每次被 runner 调用都记一行（含结局），排查与观测 hook 行为。"""
     try:
         import datetime
         trace = Path.home() / ".zcode" / "cli" / "aimh_hook_trace.log"
@@ -109,9 +92,6 @@ def main(argv):
             else:
                 i += 1
 
-        if not _in_aimh_workspace(project_dir):
-            _trace(project_dir, "guarded-silent")
-            return 0  # 其他工作区 → 静默，卡片只属于 AIMH 仓库
         text = _load_card(card_path)
         if text is None:
             _trace(project_dir, "card-missing")

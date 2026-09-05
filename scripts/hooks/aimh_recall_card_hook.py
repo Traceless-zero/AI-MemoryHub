@@ -40,14 +40,20 @@ DEFAULT_CARD = REPO_ROOT / "skills" / "aimh-recall" / "references" / "recall_car
 
 
 def _in_aimh_workspace(project_dir):
-    """project_dir 落在本仓库内才允许注入；空值=无法判定，放行（兼容手工运行）。"""
+    """放行判据：AIMH 仓库内，或 ZCode 全局默认工作区（~/.zcode/workspace/*）。
+    全局对话是召回卡的主场景（无工作区 AGENTS.md，卡是唯一纪律载体）；
+    其他具体项目仓库仍静默，防误注。空值=无法判定，放行（兼容手工运行）。"""
     if not project_dir:
         return True
     p = os.path.normcase(os.path.normpath(project_dir))
     if p.startswith("${"):  # 模板变量未被展开 → 宁静默不误注
         return False
     repo = os.path.normcase(os.path.normpath(str(REPO_ROOT)))
-    return p == repo or p.startswith(repo + os.sep)
+    if p == repo or p.startswith(repo + os.sep):
+        return True
+    zws = os.path.normcase(os.path.normpath(
+        os.path.expanduser("~/.zcode/workspace")))
+    return p == zws or p.startswith(zws + os.sep)
 
 
 def _load_card(path):

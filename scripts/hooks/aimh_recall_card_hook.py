@@ -15,22 +15,39 @@
 - 任何异常 / 卡缺失 / 卡为空 → 静默 exit 0（fail-open，绝不阻塞会话）。
 - exit 2 保留给「故意阻断」，本脚本永不使用。
 
+工作区护栏（用户级 hook 对全工作区生效，2026-09-05 实证 workspace 级
+hooks 有信任门 config.project_hooks.pending_trust 会静默拦置，故迁用户级）：
+- 以 --project-dir ${ZCODE_PROJECT_DIR} 传入当前工作区，仅当落在本仓库内
+  才注入；其他工作区静默 exit 0。
+- 模板变量未展开（传入门面话 "${...}" 字面量）→ 视为无法判定 → 宁静默不误注。
+
 用法：
   python aimh_recall_card_hook.py                  # hook 模式（JSON 注入）
   python aimh_recall_card_hook.py --print          # 人读模式（原样打印卡片）
   python aimh_recall_card_hook.py --card <path>    # 指定卡路径（测试/覆盖）
   python aimh_recall_card_hook.py --format wrapped # hookSpecificOutput 包裹版
+  python aimh_recall_card_hook.py --project-dir <dir>  # 工作区护栏判据
 """
 
 import io
 import json
+import os
 import sys
 from pathlib import Path
 
-DEFAULT_CARD = (
-    Path(__file__).resolve().parents[2]
-    / "skills" / "aimh-recall" / "references" / "recall_card.md"
-)
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_CARD = REPO_ROOT / "skills" / "aimh-recall" / "references" / "recall_card.md"
+
+
+def _in_aimh_workspace(project_dir):
+    """project_dir 落在本仓库内才允许注入；空值=无法判定，放行（兼容手工运行）。"""
+    if not project_dir:
+        return True
+    p = os.path.normcase(os.path.normpath(project_dir))
+    if p.startswith("${"):  # 模板变量未被展开 → 宁静默不误注
+        return False
+    repo = os.path.normcase(os.path.normpath(str(REPO_ROOT)))
+    return p == repo or p.startswith(repo + os.sep)
 
 
 def _load_card(path):
@@ -54,12 +71,16 @@ def _emit_json(text, wrapped):
 def main(argv):
     try:
         card_path = DEFAULT_CARD
+        project_dir = None
         wrapped = False
         human = False
         i = 0
         while i < len(argv):
             if argv[i] == "--card" and i + 1 < len(argv):
                 card_path = Path(argv[i + 1])
+                i += 2
+            elif argv[i] == "--project-dir" and i + 1 < len(argv):
+                project_dir = argv[i + 1]
                 i += 2
             elif argv[i] == "--format" and i + 1 < len(argv):
                 wrapped = argv[i + 1] == "wrapped"
@@ -70,6 +91,8 @@ def main(argv):
             else:
                 i += 1
 
+        if not _in_aimh_workspace(project_dir):
+            return 0  # 其他工作区 → 静默，卡片只属于 AIMH 仓库
         text = _load_card(card_path)
         if text is None:
             return 0  # 卡缺失/为空 → 静默，注入空串毫无意义

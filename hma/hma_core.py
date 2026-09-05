@@ -646,7 +646,12 @@ class _MechanicalLayer:
         # 真答案常落在非路由包（如「误删脚本」在 用户/用户数据.md、「文档写给谁看」
         # 在 用户/用户数据.md），路由缩圈会把它们排除在命中范围外。
         hit_files = self._corpus_top_term_hit_files(terms, None)
-        if hit_files:
+        if False:  # 【2026-09-05 废除 corpus_hit_rerank 重排】沙箱变体 B 实测：文件粒度密度
+            # 重排在厚单文件包（daylog 一文件 N 锚点）内密度并列 → 兜底退化为锚点标题序，
+            # 锚点级 BM25 分被整体丢弃（beat12 300.4 被踩到第 12 位，MCP keywords 路径
+            # top5 永远是包内前五条）。回归 13/13 + bench 25/25 全绿后废除。
+            # 保留 hit_files 计算：「语料含实体 → 不拒答」信号仍在。
+            # 若未来再现 body-only 事实沉底案例，恢复本块须同时给包内保 BM25 序。
             ans = self._body_aware_rerank(scored, terms, top_k, pid, hit_files)
             return {"answer": ans, "abstain": False,
                     "reason": "corpus_hit_rerank",

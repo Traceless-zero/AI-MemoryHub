@@ -22,3 +22,10 @@ to_delete/
 
 # ---- 二进制 / 老旧产物 ----
 一键更新记忆索引.exe（已老旧）
+
+# 记忆语料本地化（2026-09-06）：memory/ 仅 AIMH-design-journal 入库，其余语料本地私有不跟踪
+memory/**
+!memory/项目/
+memory/项目/**
+!memory/项目/AIMH-design-journal/
+!memory/项目/AIMH-design-journal/**

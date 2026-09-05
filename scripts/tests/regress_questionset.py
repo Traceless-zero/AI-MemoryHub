@@ -112,6 +112,19 @@ CASES = [
          kw=["起包规则"], abstain=True, kind="recall_sub",
          expect_sub=["起包规则"],
          note="daylog 骨架·步骤4（起包）映射：召回键「起包规则」→ daylog设计·起包规则锚点（top5 内即可，拆包规范§6 为相邻位）。"),
+    # —— T21-T23：aimh-ingest 流程召回键映射钉（SKILL.md 六步 → 拆包与收录规范锚点，2026-09-05）——
+    dict(id="T21", q="aimh-ingest 通用收录流程", mode="single",
+         kw=["通用收录流程"], abstain=True, kind="recall_sub",
+         expect_sub=["通用收录流程"],
+         note="ingest 骨架·步骤1/2（定位root+比对index硬闸门）映射：召回键「通用收录流程」→ 拆包规范§2。"),
+    dict(id="T22", q="aimh-ingest 拆包触发铁律", mode="single",
+         kw=["拆包触发铁律"], abstain=True, kind="recall_sub",
+         expect_sub=["拆包触发铁律"],
+         note="ingest 骨架·步骤3（拆分）映射：召回键「拆包触发铁律」→ 拆包规范§3（凝聚性+体积）。"),
+    dict(id="T23", q="aimh-ingest 项目包体拆包", mode="single",
+         kw=["项目包体拆包"], abstain=True, kind="recall_sub",
+         expect_sub=["项目包体拆包"],
+         note="ingest 模块路由（项目工程）映射：召回键「项目包体拆包」→ 拆包规范§5（README 式功能拆包）。"),
 ]
 
 

@@ -68,6 +68,18 @@ def _emit_json(text, wrapped):
     sys.stdout.write("\n")
 
 
+def _trace(project_dir, outcome):
+    """触发留痕：每次被 runner 调用都记一行（含被护栏拦下的），排查 hook 是否真触发。"""
+    try:
+        import datetime
+        trace = Path.home() / ".zcode" / "cli" / "aimh_hook_trace.log"
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with io.open(trace, "a", encoding="utf-8") as f:
+            f.write(f"{stamp} | outcome={outcome} | project_dir={project_dir!r}\n")
+    except Exception:
+        pass  # 留痕失败不影响主流程
+
+
 def main(argv):
     try:
         card_path = DEFAULT_CARD
@@ -92,9 +104,11 @@ def main(argv):
                 i += 1
 
         if not _in_aimh_workspace(project_dir):
+            _trace(project_dir, "guarded-silent")
             return 0  # 其他工作区 → 静默，卡片只属于 AIMH 仓库
         text = _load_card(card_path)
         if text is None:
+            _trace(project_dir, "card-missing")
             return 0  # 卡缺失/为空 → 静默，注入空串毫无意义
         if human:
             try:
@@ -103,6 +117,7 @@ def main(argv):
                 pass
             sys.stdout.write(text + "\n")
         else:
+            _trace(project_dir, "injected")
             _emit_json(text, wrapped)
     except Exception:
         return 0  # fail-open：任何异常静默退出，绝不阻塞会话

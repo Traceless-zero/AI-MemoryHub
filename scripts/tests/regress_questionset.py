@@ -142,6 +142,10 @@ CASES = [
          kw=["锁章"], abstain=True, kind="recall_sub",
          expect_sub=["长尾细节锁章召回"],
          note="obscure-recall 收编映射：召回键「锁章」→ 召回消歧管线 §13（无锚点长尾细节，人机共审，ABSTAIN 即停）。"),
+    dict(id="T28", q="召回操作协议", mode="single",
+         kw=["召回操作协议"], abstain=True, kind="recall_sub",
+         expect_sub=["召回操作协议"],
+         note="aimh-recall 骨架化映射：召回键「召回操作协议」→ 召回消歧管线 §14（检索例程/关键词提取/REFINE/路径协议/拒答层/时间唤起六节，原 SKILL.md 细则收编）。"),
 ]
 
 

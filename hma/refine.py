@@ -17,13 +17,10 @@ decomposer 契约：`callable(memory, q, context=None) -> List[str]`（返回已
 
 # 零-ML 同义词 / 常识关联词典。键=查询里可能出现的表层词；值=语料里真实存在的
 # 主题词（即 REFINE 要把查询「桥接」到的目标词）。生产由 LLM 动态生成，此处仅兜底。
+# 本地私有词条不进代码：SYNONYM_DICT 只留通用常识关联；
+# OC/项目专属桥接放 <memory_root>/.refine_local.json（本地数据文件，
+# 由 _load_local_dict 合并——该文件含私有概念词，gitignore 排除不推送）。
 SYNONYM_DICT = {
-    # 示例角色 OC 实例（源自设计日志 2026-08-13 的 REFINE 演示）：
-    "最值钱": ["宝石", "珠宝", "钻石", "示例信物", "贵重物品"],
-    "值钱": ["宝石", "珠宝", "钻石", "贵重物品"],
-    "珍宝": ["宝石", "珠宝", "示例信物"],
-    "离开": ["假死", "脱身", "撤离", "消失"],
-    "背叛": ["倒戈", "反水", "出卖"],
     # 通用常识关联（零-ML 可枚举）：
     "去世": ["死亡", "离世", "过世"],
     "娃": ["孩子", "子女", "儿子", "女儿"],
@@ -34,11 +31,28 @@ SYNONYM_DICT = {
 }
 
 
-def _expand(base_terms, q):
-    """按 SYNONYM_DICT 把表层词桥接到语料主题词，去重保序。"""
+def _load_local_dict(root):
+    """读 <memory_root>/.refine_local.json（本地私有桥接词条，gitignore 排除）。"""
+    if not root:
+        return {}
+    p = _os.path.join(root, ".refine_local.json")
+    if not _os.path.isfile(p):
+        return {}
+    try:
+        with _io.open(p, encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return {}
+
+
+def _expand(base_terms, q, extra=None):
+    """按 SYNONYM_DICT（+本地扩展）把表层词桥接到语料主题词，去重保序。"""
     out = list(base_terms)
     haystack = [q] + base_terms
-    for key, syns in SYNONYM_DICT.items():
+    merged = dict(SYNONYM_DICT)
+    if extra:
+        merged.update(extra)
+    for key, syns in merged.items():
         if any(key in h for h in haystack):
             for s in syns:
                 if s not in out:
@@ -56,7 +70,8 @@ def dict_refine_decomposer(memory, q, context=None):
     比本词典更泛化、更准——但本函数保证无模型时管线闭环。
     """
     base = [t for t in q.lower().strip().split() if t]
-    return _expand(base, q)
+    extra = _load_local_dict(getattr(memory, "root", None))
+    return _expand(base, q, extra)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -67,6 +82,8 @@ def dict_refine_decomposer(memory, q, context=None):
 # 只有「知道量子计算是个整体词」（jieba 或 AI keywords 接口）才能拒。因此本闸
 # 只抓**与语料零共现**的最外国语料（太阳系/红烧肉/珠穆朗玛峰/鲁迅故乡类），
 # 是零依赖、域自适应的安全网；复合实体域外题仍由 AI keywords 接口兜。
+import io as _io
+import os as _os
 import re as _re
 import json as _json
 

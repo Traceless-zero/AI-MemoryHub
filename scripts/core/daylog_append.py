@@ -40,6 +40,7 @@ import io
 import json
 import os
 import re
+import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -505,6 +506,8 @@ def main(argv=None):
                     help="本 beat 锚点 keywords，逗号分隔（必填，AI 拆词提供，缺则 error 不落盘）")
     ap.add_argument("--date", default=None, help="YYYY-MM-DD，默认今天")
     ap.add_argument("--time", dest="time_str", default=None, help="HH:MM，默认当前时间")
+    ap.add_argument("--no-rebuild", action="store_true",
+                    help="跳过收尾自动重建索引（默认自动，红线5 机制化）")
     args = ap.parse_args(argv)
 
     today = datetime.date.today().isoformat()
@@ -642,6 +645,14 @@ def main(argv=None):
         print("    [i] FM anchors 已同步追加本 beat 锚点（Chapter=%s）" % chapter)
     elif anchor_state == "exists":
         print("    [i] FM anchors 已存在同 Chapter 锚点，跳过（幂等）")
+    if not getattr(args, "no_rebuild", False):
+        rb = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "rebuild_index.py")
+        print("[i] 自动重建索引（红线5 机制化：落 .md 必重建）")
+        r = subprocess.run([sys.executable, rb, "--no-gui"])
+        if r.returncode != 0:
+            print("[!] 自动重建失败——本次 beat 在检索层不可见！"
+                  "手动执行： python scripts/core/rebuild_index.py --no-gui")
     return 0
 
 

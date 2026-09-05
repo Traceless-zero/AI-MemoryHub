@@ -83,6 +83,17 @@ CASES = [
               "文件粒度密度重排，同包锚点并列退化为标题序，beat12 的 300.4 被踩出"
               "top5——本用例钉住 abstain 路径下锚点级 BM25 序存活（废除重排后 "
               "beat12 回榜首）。q 须归约核心短词；keywords 用索引词形（连写 y极值）。"),
+    dict(id="T15", q="纵坐标撑爆了", mode="single",
+         kw=["纵坐标", "撑爆"], known_gap=True, kind="recall_sub",
+         expect_sub=["补回列容量折行"],
+         note="【2026-09-05】转述探针（known_gap 红基线）：表面词与语料词形完全错开"
+              "（纵坐标/撑爆 vs y极值/±5250/蚂蚁，grep 零命中）——钉住词法召回的转述"
+              "缺口。AI 流（理解层抽词+REFINE 桥接）或本地向量通道任一落地即应翻绿"
+              "（FIXD）；直接改 expect/keywords 洗绿 = 违反红线⑦。"),
+    dict(id="T16", q="画布上下叠在一起了", mode="single",
+         kw=["叠在一起"], known_gap=True, kind="recall_sub",
+         expect_sub=["修 relayout 纵向重叠"],
+         note="转述探针 2：「叠在一起」vs 语料「纵向重叠」——同 T15。"),
 ]
 
 

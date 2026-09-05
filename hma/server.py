@@ -88,12 +88,12 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "q": {"type": "string", "description": "检索关键词"},
+                "q": {"type": "string", "description": "检索关键词——必须为归约后的核心短词（例：「y 极值」「示例信物」），禁止整句原话（整句稀释 BM25 排名，命中崩塌）"},
                 "top_k": {"type": "integer", "description": "返回条数，默认 5"},
                 "multihop": {"type": "boolean",
                              "description": "true=沿 linked 双向 BFS 扩簇多跳召回（跨包关联推理）；默认 false 走单跳关键词匹配"},
                 "keywords": {"type": "array", "items": {"type": "string"},
-                             "description": "AI 理解层解析出的复合实体词（如 ['量子计算','最新进展']）；传入即启用 corpus_missing_entity 硬拒答闸——判别实体在语料查不到则拒答"},
+                             "description": "AI 理解层解析出的复合实体词——用索引词形（与语料连写一致，如「y极值」而非「y 极值」）；例 ['量子计算','最新进展']；传入即启用 corpus_missing_entity 硬拒答闸——判别实体在语料查不到则拒答"},
                 "scope": {"type": "string",
                           "description": "聚焦检索：传入目录路径（绝对路径或相对 memory 根），只召回该子树内的记忆、屏蔽其他记忆干扰（如 '项目/AIMH-design-journal' 或绝对路径）。留空=全仓（零回归）。聚焦只收束候选范围，不提升精度、不替你拒答离题问题"},
                 "mode": {"type": "string",
@@ -117,11 +117,11 @@ TOOLS = [
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    "q": {"type": "string", "description": "检索关键词（剧情/事件/特征词）"},
+                    "q": {"type": "string", "description": "检索关键词（剧情/事件/特征词）——归约后的核心短词，禁止整句原话（整句稀释 BM25 排名，命中崩塌）"},
                 "top_k": {"type": "integer", "description": "返回条数，默认 5"},
                 "allow_abstain": {"type": "boolean", "description": "true=开启拒答层（三道确定性闸门：空池/覆盖不足/四要素越界）；召回不足时返回 (ABSTAIN: reason) 而非硬凑结果。V1.0 起默认 true（拒答层默认开启；传 false 退回旧硬凑行为）"},
                 "keywords": {"type": "array", "items": {"type": "string"},
-                             "description": "AI 理解层解析出的复合实体词（如 ['量子计算','最新进展']）；传入即启用 corpus_missing_entity 硬拒答闸——判别实体在语料查不到则拒答"},
+                             "description": "AI 理解层解析出的复合实体词——用索引词形（与语料连写一致，如「y极值」而非「y 极值」）；例 ['量子计算','最新进展']；传入即启用 corpus_missing_entity 硬拒答闸——判别实体在语料查不到则拒答"},
                 "scope": {"type": "string",
                           "description": "聚焦检索：传入目录路径（绝对路径或相对 memory 根），只召回该子树内的记忆、屏蔽其他记忆干扰。留空=全仓（零回归）。聚焦只收束候选范围，不提升精度、不替你拒答离题问题"},
                 "mode": {"type": "string",
@@ -146,7 +146,7 @@ TOOLS = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "q": {"type": "string", "description": "检索关键词"},
+                "q": {"type": "string", "description": "检索关键词——必须为归约后的核心短词（例：「y 极值」「示例信物」），禁止整句原话（整句稀释 BM25 排名，命中崩塌）"},
                 "top_k": {"type": "integer", "description": "返回条数，默认 5"},
                 "multihop": {"type": "boolean",
                              "description": "true=沿 linked 多跳扩簇后跑歧义门（跨包关联推理）"},
@@ -155,7 +155,7 @@ TOOLS = [
                 "allow_abstain": {"type": "boolean",
                                   "description": "true=开启拒答层（默认 true）；AI 接口 keywords 传入时，判别实体不在语料则拒答"},
                 "keywords": {"type": "array", "items": {"type": "string"},
-                             "description": "AI 理解层解析出的复合实体词（如 ['量子计算','最新进展']）；传入即启用 corpus_missing_entity 硬拒答闸"},
+                             "description": "AI 理解层解析出的复合实体词——用索引词形（与语料连写一致，如「y极值」而非「y 极值」）；例 ['量子计算','最新进展']；传入即启用 corpus_missing_entity 硬拒答闸"},
                 "scope": {"type": "string",
                           "description": "聚焦检索：传入目录路径（绝对路径或相对 memory 根），只召回该子树内的记忆、屏蔽其他记忆干扰。留空=全仓（零回归）。聚焦只收束候选范围，不提升精度、不替你拒答离题问题"},
                 "mode": {"type": "string",

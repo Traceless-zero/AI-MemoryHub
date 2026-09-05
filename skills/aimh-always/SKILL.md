@@ -3,7 +3,7 @@ name: aimh-always
 description: >
   HMA（Hybrid Memory Architecture）长期记忆技能——在本会话通过 @skill:aimh-always 调出后，
   全程常驻、主动触发：AI 每回合默认带记忆意识，浮现持久事实/决策/偏好/踩坑即主动存，
-  问题可能涉及过往上下文即主动查；并复用 aimh-ingest / oc-dossier / memory-import
+  问题可能涉及过往上下文即主动查；并复用 aimh-ingest / oc-dossier
   子技能完成收录/扮演/检索。注意：WorkBuddy 不会自动加载技能，须用户先 @skill 调出本技能，
   调出后它在本会话内常驻（无需再喊口令）：
   - 任何需要持久记忆能力的会话（调出后常驻，不再等用户喊"启动"）
@@ -99,7 +99,7 @@ mcp__aimh__memory_read_section 用户操作手册 "<章节标题>"  # L3 取该�
 
 **另有两个技能位于项目 `.workbuddy/skills/`（未进 router.md，按需加载）**：
 - `aimh-worldbook` —— 长文 / 整本书拆成「世界书」（概览包 + 分章包 + 人物 / 概念聚合包）；超长文本不经济时先回问用户再用。
-- `aimh-obscure-recall` —— 不起眼物件 / 长尾细节追问（无预埋锚点时，用 context-scope 锁章 + 人机共审选段）。与 `aimh-recall`（具名实体锚点召回）互补。
+- 长尾细节追问（无预埋锚点）→ `aimh-recall` 长尾细节模式（`memory_obscure_recall`，锁章 + 人机共审）。与具名实体锚点召回互补。
 
 ## 后台铁律（源自 CEMA 设计，权威版见 `references/router.md`）
 - **前后台 1:1**：每事件包恰一条索引记录；`.md` 是权威源，索引可由 front-matter 全量重建。
@@ -115,7 +115,7 @@ mcp__aimh__memory_read_section 用户操作手册 "<章节标题>"  # L3 取该�
 - 子技能位置（双副本）：`skills/` 与 `~/.workbuddy/skills/`
 
 ## 收尾纪律（写后一律调 EXE 刷新索引）
-任何落库操作（`aimh-ingest` / `oc-dossier` / `aimh-project` / `memory-import` 写 `.md` 后），收尾统一调用：
+任何落库操作（`aimh-ingest` / `oc-dossier` 写 `.md` 后、`migrate_*_memory.py` / `compact.py` 确定性写后），收尾统一调用：
 - 双击等价：`一键更新记忆索引.exe`（无头环境设 `HMA_NO_GUI=1`）
 - 等效无弹窗：`python scripts/core/rebuild_index.py`（AI 路线优先用这条）
 > 与手动路线殊途同归，索引永远只有一个真相来源。

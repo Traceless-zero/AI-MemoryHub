@@ -24,7 +24,7 @@
 
 ## 怎么落库（CEMA 铁律）
 AI 只做理解 / 拆分 / 关联判断；落库、建索引、装卸一律交 `hma.engine` CLI 与
-`aimh-ingest` / `oc-dossier-*` / `memory-import` 子技能。写后调用
+`aimh-ingest` / `oc-dossier` 子技能（客户端记忆迁移走 intake 召回键「客户端记忆迁移」）。写后调用
 `python scripts/core/rebuild_index.py` 刷新索引。
 
 ## 检索三级漏斗

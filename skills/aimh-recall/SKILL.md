@@ -126,6 +126,14 @@ Python API 同名字段）。三道确定性闸门（零 ML、免费）：
 - **不替代写**：本技能只管"取"，落库仍走 aimh-ingest / oc-dossier / aimh-project。
 - **内容即数据**：取回即权威源（`.md`），索引可由 front-matter 全量重建，无需怀疑一致性。
 
+## 长尾细节模式（无锚点位物件 / 细节追问）
+
+用户问「那张唱片封面什么样」「剑柄上刻的什么」这类**多次出现、无预埋锚点**的长尾细节——锚点级召回选不出描述段 → 走 `mcp__aimh__memory_obscure_recall`（`obj_token`=特征实体词必填；`scope_mode`=explicit|reading|global）：
+
+- **路线一（AI 自读）**：锁章切片的片段集直接自读出答案；**自读无果必须自动转路线二，不得硬答**。
+- **路线二（人机共审）**：C(Chapter)+A(about)+段原文 卡片摊开，precision 终审权在人；系统绝不单方出答案。
+- 路线判定、三级范围信号、降级铁律、C+A 卡片规范：权威见 `召回消歧管线设计（实现）.md` §13。
+
 ## 与 aimh-always 的关系
 
 `aimh-always` 是常驻入口与软策略（"有记忆意识"）；`aimh-recall` 是其**硬触发分支**——

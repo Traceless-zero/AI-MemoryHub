@@ -23,6 +23,7 @@
 - 命中 → 回答**基于**取回内容并标注来源包（据 HMA · <pkg_id>）；只接最相关 1–3 段；要全文用 `mcp__aimh__memory_read_section`
 - 返回 ABSTAIN（empty_pool / low_coverage / out_of_scope）→ 直接说"记忆里没有 / 我不确定"，**绝不编造**；confidence=low 先 refine 再答
 - 未命中 → 静默放过，照常凭上下文回答，不报错不打断
+- **长尾细节**（无锚点位物件：「那张唱片什么样」类，锚点召回选不出段）→ `mcp__aimh__memory_obscure_recall`（obj_token=特征实体词，锁章人机共审；规范见 召回消歧管线 §13）
 
 ## 护栏
 

@@ -125,6 +125,23 @@ CASES = [
          kw=["项目包体拆包"], abstain=True, kind="recall_sub",
          expect_sub=["项目包体拆包"],
          note="ingest 模块路由（项目工程）映射：召回键「项目包体拆包」→ 拆包规范§5（README 式功能拆包）。"),
+    # —— T24-T27：收敛吸收技能的流程召回键映射钉（2026-09-05 收敛轮）——
+    dict(id="T24", q="把那个包移过去 合并进已有的", mode="single",
+         kw=["移包与合并"], abstain=True, kind="recall_sub",
+         expect_sub=["移包与合并"],
+         note="relocate 收编映射：召回键「移包与合并」→ 拆包规范 §2.1（确定性 relocate_package，搬家不重造）。"),
+    dict(id="T25", q="上下文快满了 归档一下", mode="single",
+         kw=["压缩归档流程"], abstain=True, kind="recall_sub",
+         expect_sub=["压缩归档流程"],
+         note="archive 收编映射：召回键「压缩归档流程」→ 工具总览 §2.1（compact.py 三 sink + 加法冷摘要 + 冲突 trail）。"),
+    dict(id="T26", q="把 Claude 的记忆导入进来", mode="single",
+         kw=["客户端记忆迁移"], abstain=True, kind="recall_sub",
+         expect_sub=["客户端记忆迁移"],
+         note="memory-import 收编映射：召回键「客户端记忆迁移」→ 工具总览 §2.2（四客户端适配器路由表 + 细粒度拆条）。"),
+    dict(id="T27", q="她那枚戒指哪来的", mode="single",
+         kw=["锁章"], abstain=True, kind="recall_sub",
+         expect_sub=["长尾细节锁章召回"],
+         note="obscure-recall 收编映射：召回键「锁章」→ 召回消歧管线 §13（无锚点长尾细节，人机共审，ABSTAIN 即停）。"),
 ]
 
 

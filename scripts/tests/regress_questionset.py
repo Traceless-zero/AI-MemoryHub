@@ -94,6 +94,24 @@ CASES = [
          kw=["叠在一起"], known_gap=True, kind="recall_sub",
          expect_sub=["修 relayout 纵向重叠"],
          note="转述探针 2：「叠在一起」vs 语料「纵向重叠」——同 T15。"),
+    # —— T17-T20：daylog 技能骨架化映射钉（SKILL.md 步骤召回键 → 权威包锚点，2026-09-05）——
+    # 骨架每步内联召回键；本组用例钉住「键 → 锚点」映射：权威包改章节名/结构时当场红。
+    dict(id="T17", q="daylog 写入协议", mode="single",
+         kw=["写入协议"], abstain=True, kind="recall_sub",
+         expect_sub=["写入协议"],
+         note="daylog 骨架·步骤2（写入）映射：召回键「写入协议」必须命中 daylog设计·写入协议锚点。"),
+    dict(id="T18", q="daylog 双轨判据", mode="single",
+         kw=["双轨判据"], abstain=True, kind="recall_sub",
+         expect_sub=["双轨判据"],
+         note="daylog 骨架·步骤1（判记账范围）映射：召回键「双轨判据」→ daylog设计·双轨判据锚点。"),
+    dict(id="T19", q="daylog 派生视图", mode="single",
+         kw=["派生视图", "主题索引"], abstain=True, kind="recall_sub",
+         expect_sub=["派生视图"],
+         note="daylog 骨架·步骤3（派生）映射：键含「主题索引」提判别力——泛词 daylog 会致并列错序（勿加）。"),
+    dict(id="T20", q="daylog 起包规则", mode="single",
+         kw=["起包规则"], abstain=True, kind="recall_sub",
+         expect_sub=["起包规则"],
+         note="daylog 骨架·步骤4（起包）映射：召回键「起包规则」→ daylog设计·起包规则锚点（top5 内即可，拆包规范§6 为相邻位）。"),
 ]
 
 

@@ -39,7 +39,7 @@ anchors:
     about: "开放问题：beat 块锚点不满足通用 5 维契约（lint 与 validate_fm 的 daylog 口径豁免），锚点靠 Chapter+about 召回、keywords 数量从简但不为空（规矩五：由 AI --anchor-keywords 必填提供）；主题索引.md 规模随 daylog 数量线性涨，需要时再考虑按季度切分。"
     keywords: ["开放问题", "5维豁免", "keywords从简", "主题索引规模", "季度切分"]
 pkage_created: 2026-08-15
-pkage_updated: 2026-09-02
+pkage_updated: 2026-09-05
 ---
 
 # daylog 设计
@@ -107,15 +107,18 @@ AI 与脚本职责切分：
 | 落盘前 validate_fm 终检（fail-closed，不过不落盘） | 脚本 |
 | 归置/路由判断 | **没有人做**（不存在这一步） |
 
-落地为 `scripts/core/daylog_append.py`：
+落地为 `scripts/core/daylog_append.py`（2026-09-05 同步 fail-closed 口径与 2026-09-05 自动重建）：
 
 ```
-python daylog_append.py --title "修了 query_anchors 中文参数" \
-  --touched "hma/server.py,hma/hma_core.py" \
+python scripts/core/daylog_append.py --title "一句标题" \
+  --touched "hma/server.py,项目/AIMH/SCHEMA" \
   --linked "项目/AIMH/开发日志" --tags "读取链路,MCP" \
-  --summary "当天真概要（可选）" \
-  --anchor-about "本 beat 特征化摘要（可选）" \
-  --body-file 正文.md        # 或 stdin
+  --summary "当天真概要（新建 daylog 必填）" \
+  --anchor-about "本 beat 锚点的特征化摘要（必填）" \
+  --anchor-keywords "词1,词2（必填，AI 拆词）" \
+  --body "正文……"            # 或 --body-file / stdin
+# 可选：--date（默认今天）、--time（默认当前时间）、--topic 可重复、
+#       --no-rebuild（跳过收尾自动重建索引——默认自动，红线5 机制化）
 ```
 
 行为：当天 daylog 不存在则按模板新建 → 扫描最大序号 → 追加 beat 块（脚本拼序号/时间戳/beat 注释）→ 校验 touched → 同步 FM（锚点追加/linked 并入/topic 合并/tags 强制）→ 输出追加结果。AI 不经手 front-matter 落盘，daylog 的 FM 字段由脚本机械维护，`pkage_updated` 每次追加自动刷。

@@ -657,8 +657,9 @@ class _MechanicalLayer:
                     "reason": "corpus_hit_rerank",
                     "confidence": "low" if cov < kappa else "high"}
         # 反相拒答闸（治本，仅 AI 接口模式启用）：查询含稀有判别实体，但语料
-        # 正文/锚点【任一都查不到】→ 域内确无该实体 → 直接拒答。补上
-        # corpus_hit_rerank「有命中才放行」缺失的半边。
+        # 正文/锚点【任一都查不到】→ 域内确无该实体 → 直接拒答。
+        # 【2026-09-05】corpus_hit_rerank 重排已废除（见上 if False）——本闸是
+        # AI 接口路径上「语料无实体 → 拒答」的唯一执行者，不再以「补半边」身份存在。
         # 仅当 terms 来自 AI 接口(keywords/decomposer) 时启用：机械切分
         # (normalize_terms) 抽不出『量子计算/回旋镖』这类复合实体，稀有过滤
         # 又会误剔真正在语料的实体（如 回旋 被设计文档举例引用而 >8% 文件 →
@@ -2892,7 +2893,8 @@ class Memory(_MechanicalLayer):
                 # agent shell 提供，引擎自身绝不调用任何模型。
                 terms = decomposer(self, q, context=context) or []
             else:
-                # 无 AI 接线 → 不再退化到机械 CJK 二元兜底（铁律：召回只走 AI 流）。
+                # 无 AI 接线 → 机械切分兜底（normalize_terms 按 +/空白 切词，
+                # 非 CJK 二元；铁律：召回主路径只走 AI 流）。
                 ql = q.lower().strip()
                 terms = normalize_terms(ql)
             if terms:

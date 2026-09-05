@@ -76,6 +76,13 @@ CASES = [
     dict(id="T13", q="前天晚上咱们定的那个检索策略，最后用的哪种？", mode="single",
          kw=["前天晚上", "检索策略"], kind="abstain",
          note="域内模糊指代→abstain/clarify（非直拒、非编造）"),
+    dict(id="T14", q="那个 y 极值最后是怎么修的？", mode="single",
+         kw=["y极值", "极值"], abstain=True, kind="recall_sub",
+         expect_sub=["补回列容量折行"],
+         note="【2026-09-05】厚单文件包 × MCP keywords 路径：corpus_hit_rerank 按"
+              "文件粒度密度重排，同包锚点并列退化为标题序，beat12 的 300.4 被踩出"
+              "top5——本用例钉住 abstain 路径下锚点级 BM25 序存活（废除重排后 "
+              "beat12 回榜首）。q 须归约核心短词；keywords 用索引词形（连写 y极值）。"),
 ]
 
 
@@ -88,7 +95,10 @@ def run_case(mem, c):
         detail = "decision=%s reason=%s" % (decision, r.get("reason"))
         return ok, detail
     if c["kind"] == "recall_sub":
-        rows = mem.query_anchors(c["q"], top_k=5, keywords=c["kw"])
+        rows = mem.query_anchors(c["q"], top_k=5, keywords=c["kw"],
+                                 allow_abstain=c.get("abstain", False))
+        if isinstance(rows, dict):          # allow_abstain=True 的结构化返回
+            rows = rows["answer"]
         got = [(p, t) for (p, t, _a, _l, _s) in rows]
         hit = any(any(sub in (p + " " + t) for sub in c["expect_sub"])
                   for (p, t) in got)

@@ -29,8 +29,6 @@ EXCLUDE_DIRS = {".git", "__pycache__", "memory", "to_delete", ".workbuddy",
 # 声明保留表（2026-09-05 首轮裁决固化）：注入式组件与接线预留，不报孤儿。
 # 增删条目须在此写明理由（红线⑧：机制演进须声明替代关系）。
 RETAINED = {
-    "dict_refine_decomposer":
-        "注入式组件：无 LLM 时经 memory_resolve(decomposer=) 注入（SKILL.md 契约）",
     "assistant_with_tools":
         "llm_adapter 工具循环接线预留（接入 LLM 工具调用时启用）",
     "parse_tool_calls":

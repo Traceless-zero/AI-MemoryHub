@@ -6,6 +6,14 @@
 
 ## 2026-09-07
 
+### 死代码清理：corpus_hit_rerank 链退役（hma_core 3547 → 3398 行，-153 行）
+
+- **背景**：2026-09-05 #05 裁决——`_abstain` 的 corpus_hit_rerank 文件粒度重排塌缩（BM25 分被丢弃、厚单文件包内密度并列退化标题序、beat12 300.4 沉底），排序职责死刑、hit_files 信号职责保留，函数体当时"保留为注释现场"（调用包在 `if False:`，daylog 标注"建议后续评估瘦身"）。本次按用户拍板执行删除，为 S4a 搬迁减负。
+- **删除**（均为无消费点代码，行为零变化）：`_body_aware_rerank`（77 行）+ 仅被它调用的 `_rep_anchor` / `_rare_anchor_hit`（58 行）+ `_abstain` 内 `if False:` 死块与 `hit_files` 计算（18 行——hit_files 在活代码中无任何消费点，Gate1 现状为 `cov < kappa` 直接拒答）。
+- **连带修正一处注释漂移（红线⑦）**：`_abstain` docstring 原宣称 Gate1"语义升级为语料包含性（覆盖不足→先查语料→低置信放行）"，该语义实际已随重排废除失效——现状是 `cov < kappa` 直接拒答。docstring 改写为当前真实闸序（Gate0/GateA/GateB/Gate1/Gate2 + 放行置信度规则），并指向 design-journal 与 daylog-2026-09-05 #05。
+- **保留**：`_rare_entities` / `_corpus_top_term_hit_files`（有活调用者）；`hit_files` 的"语料含实体→不拒答"信号如未来 Gate1 需做包含性放行，可从 `_corpus_top_term_hit_files` 恢复（活函数未动）。
+- **验证**：compileall OK；全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**；`bench_veronica_20_5` **可答 20/20（0 误拒）+ 对抗 5/5（0 漏拒）**——拒答闸行为完好；`audit_comment_pins` 无新增 UNPINNED（G2-Q5 / Edit 7 两条人工核明细随死代码注释移除，主张钉在 daylog #05 未失）；`audit_orphans` 无新增孤儿。
+
 ### S3 拆分第三步：聚合+时间线抽至 `hma/aggregate_time.py`（hma_core 4022 → 3546 行）
 
 - **内容**：时间解析常量区（`_MONTH_ALIASES` / `_NUM_WORDS` / `_RE_ISO` / `_RE_YEAR` / `_PART_RANGE` 等十余个词表与正则，49 行）+ `TimeHint` / `parse_time_hint` / `_is_union_query` / `_time_tiebreak`（243 行）+ `_agg_build_where` / `db_aggregate` / `time_filter` / `_time_hard_match` 与 `_AGG_COL_WHITELIST` / `_AGG_UNITS` 双白名单（181 行）收编为 `aggregate_time.py`（496 行）。`Memory.aggregate` / `Memory.filter_by_time` 薄转发留在 hma_core（方法体零改动，靠 re-export 的后端名继续工作）。

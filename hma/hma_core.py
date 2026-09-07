@@ -480,141 +480,6 @@ class _MechanicalLayer:
                     return True
         return False
 
-    def _rep_anchor(self, fp):
-        """为某 filepath 取一个代表锚点元组（与 scored 同构：rid,title,about,locator,score）。
-
-        优先用 front-matter 首个锚点；无锚点（纯正文文件）则用文件名 stem 作代表。
-        供 body 感知重排把答案锚定到正文真含判别词的文件时使用。score 给 0.0
-        （代表锚点不参与 BM25 排序，仅作「该文件确有此事实」的落点证据）。
-        """
-        c = self._conn()
-        row = c.execute("SELECT anchors FROM events WHERE filepath=?", (fp,)).fetchone()
-        anchors = []
-        if row and row[0]:
-            try:
-                anchors = json.loads(row[0]) or []
-            except Exception:
-                anchors = []
-        d = next((a for a in anchors if isinstance(a, dict)), None)
-        if d:
-            return (fp,
-                    d.get("title", "") or d.get("Chapter", ""),
-                    d.get("about", "") or d.get("summary", ""),
-                    d.get("locator", d.get("title", "") or d.get("Chapter", "")),
-                    0.0)
-        stem = os.path.splitext(os.path.basename(fp))[0]
-        return (fp, stem, "", stem, 0.0)
-
-    def _rare_anchor_hit(self, fp, rare):
-        """该 doc 的 front-matter 锚点是否直接命中任一 rare 判别词（title/about/keywords）。
-
-        用于 body-aware rerank 的「密度并列」兜底：锚点自身就讲该判别词 → 文档『关于』
-        查询的概率更高，应排在仅正文顺带提及的 doc 之前。例：「项目名」题 什么是AIMH系统
-        锚点讲项目命名 → 胜出；SCHEMA 仅正文含词、锚点不命中 → 落败。此兜底**不伤**
-        body-only 救援（误删脚本事件）：救援 doc（用户数据）锚点本就不命中判别词、
-        靠 density 主序保位，distractor（存储架构总览）锚点也只命中泛词「架构」、不命中
-        判别词 → 两者 rare_anchor_hit 同为 0、退回原 filepath 并列，位置不变。
-        """
-        if not rare:
-            return 0
-        c = self._conn()
-        row = c.execute("SELECT anchors FROM events WHERE filepath=?", (fp,)).fetchone()
-        if not row or not row[0]:
-            return 0
-        try:
-            anchors = json.loads(row[0]) or []
-        except Exception:
-            return 0
-        rl = {t.lower() for t in rare}
-        for a in anchors:
-            if not isinstance(a, dict):
-                continue
-            # 只查锚点的「描述性文本」(title/Chapter/about/summary)，不查 keywords/tags
-            # —— 后者是结构化标签，distractor 常借 cross-reference 关键词顺带带上判别词
-            # （如「误删脚本事件」题 存储架构总览 的 keywords 提误删），会误抬 distractor。
-            blob = " ".join(str(a.get(k, "")) for k in
-                           ("title", "Chapter", "about", "summary")).lower()
-            if any(t in blob for t in rl):
-                return 1
-        return 0
-
-    def _body_aware_rerank(self, scored, terms, top_k, pid=None, hit_files=None):
-        """语料包含性命中后，把答案重排到正文真含稀有实体的文件（治本之「精准」）。
-
-        scored 是 BM25 锚点弱命中（可能因 rebuild 未派生 body 锚点而命中错包）。
-        重排策略——按"文件命中稀有实体密度"排序，而非简单"含词即置顶"：
-          概念词常跨包共现（用户数据也详述 AIMH），光"含词"无法区分 design-journal
-          真答案与用户数据顺带提及；只有按"正文含多少稀有特异实体"降序，才能让真
-          答案包（密度更高）排前。
-          1) scored 里正属命中文件的锚点优先，且在该组内按稀有实体密度降序；
-          2) 若 scored 全部不属命中文件（BM25 未召回正文文件），则主动从 corpus
-             命中文件构造代表锚点（见 _rep_anchor）按密度排序塞到最前。
-        返回与 scored 同构的 filepath 元组列表（供 _stemify 后返回）。
-        """
-        if not terms:
-            return scored[:top_k]
-        rare = self._rare_entities(terms, pid)
-        # 文件「稀有实体命中密度」= 正文含多少 rare 词（越多越可能是真答案包）。
-        # ⚠️ 正文必须走 read_body(fp)（全路径），与 _corpus_top_term_hit_files 同源：
-        # _pkg_body(rid) 在全局句柄下把 stem 传给 read()，常解析失败返回空体 →
-        # density 恒 0 → 误删脚本等 body-only 事实永远沉底（G2-Q5 回归根因）。
-        def _density(fp):
-            b = self.read_body(fp) or ""
-            if not rare:
-                return 0
-            # ⚠️ 计【出现次数】而非【不同词数】：「详述该事件的文件」(用户数据 多次
-            # 提及 误删/脚本) 应胜过「仅顺带 cross-reference 一次的文件」(SCHEMA/
-            # 用户操作手册 提一次)。否则密度按不同词计数时两者并列、靠 filepath 兜底，
-            # 真答案(body-only 救援) 被高密度 distractor 挤出 top-5（误删脚本题回归根因）。
-            bl = b.lower()
-            return sum(bl.count(t.lower()) for t in rare)
-        if not hit_files:
-            hit_files = self._corpus_top_term_hit_files(terms, pid)
-        if not hit_files:
-            return scored[:top_k]
-        hit_set = set(hit_files)
-        scored_ids = {s[0] for s in scored}
-        # 1) body_hit：锚点池(scored)里命中文件的真锚点（保留原始 about/locator），
-        #    按正文稀有实体密度降序——真答案包（含判别词最多）自然居前。
-        body_hit = [s for s in scored if s[0] in hit_set]
-        # 2) added：命中但不在锚点池、且正文真含稀有实体(density>0)的 body-only 事实
-        #    （如「误删脚本事件」「文档写给谁看」仅落正文）→ 有界补加（最多 2 个，
-        #    取密度最高者）按密度降序。density=0 的「含词」噪音代表锚点绝不纳入
-        #    （Edit 7 回归根因：无差别前置把 BM25 真答案挤出 top-5）。
-        added = []
-        for fp in hit_files:
-            if fp in scored_ids:
-                continue
-            if _density(fp) <= 0:
-                continue
-            # ⚠️ 排除「日记类」文件（stem 以 daylog 开头）：日记是包罗万象的流水账，
-            # 正文常顺带提及一切术语，按密度会被误推到真答案锚点之前（如「resolver
-            # 循环」被 daylog-2026-08-13 以 score=0.0 抢 top1 的重排越权）。日记内容
-            # 已由 linked-BFS / 上下文覆盖，不应作为精准答案锚点被密度重排抬举。
-            stem = os.path.splitext(os.path.basename(fp))[0]
-            if stem.lower().startswith("daylog"):
-                continue
-            added.append(self._rep_anchor(fp))
-        added.sort(key=lambda s: (-_density(s[0]),
-                                   -self._rare_anchor_hit(s[0], rare), s[0], s[1]))
-        added = added[:2]
-        # 3) 命中代表 = body_hit ∪ added，整体按密度降序；**密度并列时以
-        #    「锚点是否命中 rare 判别词」(rare_anchor_hit) 兜底**——锚点自身就讲该
-        #    判别词的 doc 比仅正文顺带提及的 doc 更『关于』查询，应居前（修「项目名」
-        #    题 SCHEMA 以 sc=0 靠 filepath 并列抢 top1 的越权）；又不伤 body-only 救援
-        #    （救援 doc 与 distractor 锚点都不命中判别词 → 同归 0、退回原 filepath 并列）。
-        #    密度仍为主序，BM25 分此处不参与排序（避免泛词高 BM25 的 distractor 反超
-        #    body-only 真答案，如「误删脚本事件」题）。
-        pool = body_hit + added
-        pool.sort(key=lambda s: (-_density(s[0]),
-                                 -self._rare_anchor_hit(s[0], rare), s[0], s[1]))
-        added_ids = {a[0] for a in added}
-        rest = [s for s in scored if s[0] not in hit_set and s[0] not in added_ids]
-        # 4) 拼接并截断 top_k：命中代表 → rest
-        ordered = pool + rest
-        truncated = ordered[:top_k]
-        return truncated
-
     def _relevance_filter(self, scored, terms, theta=0.5):
         """相关性硬阈值过滤（用户提案：匹配词加分 + 分界线）。
 
@@ -675,39 +540,25 @@ class _MechanicalLayer:
                  entity_gate=False):
         """四道闸聚合；返回结构化结果，让调用方区分「无答案」与「拒答」。
 
-        Gate1（low_coverage）语义升级为「语料包含性」：
-          top_k 锚点覆盖 < kappa 不再直接拒答，而是先看查询**最判别词**是否真在
-          语料里——在 → 领域内事实（只是没被锚定/锚点弱）→ 低置信返回当前最佳
-          锚点，绝不误拒；不在 → 语料真缺该实体 → 拒答。这把「拒答=锚点弱」修正为
-          「拒答=语料无该实体」，治本解决正文 ### 段事实被过度拒答的问题。
+        闸序（任一命中即拒答，返回结构化结果让调用方区分「无答案」与「拒答」）：
+          Gate0 empty_pool            空池
+          GateA corpus_missing_entity 查询稀有实体全不在语料（仅 entity_gate，AI 接口）
+          GateB corpus_missing_entity_mech  与语料零共现（仅机械兜底路径）
+          Gate1 low_coverage          top_k 锚点 IDF 加权覆盖 < kappa → 拒答
+          Gate2 out_of_scope          四要素越界
+        放行时 confidence=high（覆盖 ≥ ABSTAIN_HIGH_K）/ low。
+        拒答语义 = 「语料无该实体/覆盖不足」，锚点弱不单独构成拒答依据
+        （body-only 事实的召回由正文 ### 段扫描与 hit_files 语料包含性信号承担，
+        详见 design-journal《召回消歧管线设计（实现）》与 daylog-2026-09-05 #05）。
         """
         if not scored:                       # Gate 0 · 空池
             return {"answer": [], "abstain": True,
                     "reason": "empty_pool", "confidence": "none",
                     "message": ABSTAIN_DEFAULT_MSG}
         cov = self._coverage(scored, terms)
-        # 语料包含性兜底（治本）：只要查询**稀有且边界独立**的实体真在语料正文，
-        # 就把含该事实的正文文件提到最前（body-only 事实不再被锚点弱匹配永久压底）；
-        # 2 字碎片需足够特异（≤8% 文件）才计入，过滤 计算/公司/世界/小说 等通用
-        # 2 字子串碰撞 → 域外问题正常拒答、域内问题（误删/拒答层/写给）不误拒。
-        # 命中检测走【全库】（pid=None），不被查询→包路由缩圈——跨包概念共现时
-        # 真答案常落在非路由包（如「误删脚本」在 用户/用户数据.md、「文档写给谁看」
-        # 在 用户/用户数据.md），路由缩圈会把它们排除在命中范围外。
-        hit_files = self._corpus_top_term_hit_files(terms, None)
-        if False:  # 【2026-09-05 废除 corpus_hit_rerank 重排】沙箱变体 B 实测：文件粒度密度
-            # 重排在厚单文件包（daylog 一文件 N 锚点）内密度并列 → 兜底退化为锚点标题序，
-            # 锚点级 BM25 分被整体丢弃（beat12 300.4 被踩到第 12 位，MCP keywords 路径
-            # top5 永远是包内前五条）。回归 13/13 + bench 25/25 全绿后废除。
-            # 保留 hit_files 计算：「语料含实体 → 不拒答」信号仍在。
-            # 若未来再现 body-only 事实沉底案例，恢复本块须同时给包内保 BM25 序。
-            ans = self._body_aware_rerank(scored, terms, top_k, pid, hit_files)
-            return {"answer": ans, "abstain": False,
-                    "reason": "corpus_hit_rerank",
-                    "confidence": "low" if cov < kappa else "high"}
         # 反相拒答闸（治本，仅 AI 接口模式启用）：查询含稀有判别实体，但语料
-        # 正文/锚点【任一都查不到】→ 域内确无该实体 → 直接拒答。
-        # 【2026-09-05】corpus_hit_rerank 重排已废除（见上 if False）——本闸是
-        # AI 接口路径上「语料无实体 → 拒答」的唯一执行者，不再以「补半边」身份存在。
+        # 正文/锚点【任一都查不到】→ 域内确无该实体 → 直接拒答。本闸是 AI 接口
+        # 路径上「语料无实体 → 拒答」的唯一执行者。
         # 仅当 terms 来自 AI 接口(keywords/decomposer) 时启用：机械切分
         # (normalize_terms) 抽不出『量子计算/回旋镖』这类复合实体，稀有过滤
         # 又会误剔真正在语料的实体（如 回旋 被设计文档举例引用而 >8% 文件 →

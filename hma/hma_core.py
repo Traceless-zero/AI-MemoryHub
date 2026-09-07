@@ -1565,8 +1565,24 @@ class EventPackage:
     def _parse_value(v):
         # 简易列表/标量解析：兼容旧式未引号中文列表 [示例角色]。
         v = v.strip()
-        if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
-            return v[1:-1]
+        # fail-closed（2026-09-07）：不支持的写法一律显式报错。
+        # FM 是唯一权威源，静默产出错误数据无人能察觉，宁可崩不可错。
+        if v.startswith("{"):
+            raise ValueError(
+                "FM 不支持流式花括号 {…}（会静默丢字段），请改用缩进写法：%r" % v[:40])
+        if v[:1] in ('"', "'"):
+            q = v[0]
+            if len(v) < 2 or v[-1] != q:
+                raise ValueError("FM 引号未闭合（疑似字面多行串）：%r" % v[:40])
+            inner = v[1:-1]
+            if "\\" in inner:
+                if "\\u" in inner or "\\x" in inner:
+                    raise ValueError("FM 暂不支持 \\u / \\x 转义：%r" % v[:40])
+                inner = (inner.replace("\\\\", "\x00")
+                              .replace('\\"', '"').replace("\\'", "'")
+                              .replace("\\n", "\n").replace("\\t", "\t")
+                              .replace("\x00", "\\"))
+            return inner
         if v.startswith("[") and v.endswith("]"):
             inner = v[1:-1].strip()
             if not inner:

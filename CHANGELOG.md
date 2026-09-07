@@ -6,6 +6,16 @@
 
 ## 2026-09-07
 
+### S2 拆分第二步：EventPackage 整类抽至 `hma/event_package.py`（hma_core 4381 → 4022 行）
+
+- **内容**：`EventPackage` 全类（round-trip 序列化 / 写回门禁 / FM 解析别名绑定，285 行）+ 四要素兼容层三函数（`_as_four` / `_merge_legacy` / `_four_to_list`，91 行，仅被本类与 `Memory.write` 消费）收编为 `hma/event_package.py`（386 行）；`hma_core` 顶部 re-export 四个名字，外部 import 面（`hma/__init__`、`fm_schema.py`、`scripts/core/` 5 处、`lint_memory` 的 `_four_to_list`）**一行未改**。
+- **过程中暴露并修掉的三个搬迁陷阱**（都是全量回归 + 快照比对当场抓的）：
+  1. **类体调 `derive_anchors`（非下划线模块级函数，首轮依赖扫描的正则只扫了下划线名，漏了）** → 定义在 hma_core 尾部，搬走即断链，5 个包的解析直接 NameError。修法：`event_package._derive_anchors_late()` 运行时延迟解析，避免循环 import。
+  2. **`_LOC_WORDS` / `_FIELD_W` / `_FIELD_NUDGE` / `_FIELD_CAP` 四个检索侧常量物理上夹在类体之后，被切割误带走** → `regress_law_demo` 等当场 NameError。已原样搬回 hma_core 原位置。
+  3. **`__init__` 用 `date.today()` 而 `datetime` 未随迁** → 两个回归当场红。已补 import。
+- **行尾卫生**：切割脚本写出 LF 而仓库内该文件为 CRLF，会制造全文件改写的垃圾 diff（4022/4381）；已转回 CRLF，最终 diff **17+/376-**，blame 可读性保住。
+- **验收**：S1 提交态（cd62665）与 S2 态解析产物快照比对 **70/70 零差异**（修复三个陷阱后复测两轮）；全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**；`from hma import EventPackage` / `from hma.hma_core import EventPackage, _four_to_list` 等外部导入身份一致（`is` 同一对象）。
+
 ### S1 拆分第一步：FM/YAML 解析器抽至 `hma/fm_yaml.py`（hma_core 4567 → 4381 行）
 
 - **内容**：按拆分计划（豆包 P2-B 落地方案）执行 S1——`EventPackage` 的 11 个解析 staticmethod（`_strip_comment` / `_scalar_or_json` / `_parse_value` / `_parse_inline` / `_is_kv` / `_empty_default` / `_parse_seq` / `_parse_mapping` / `_parse_node` / `_normalize_anchor_kws` / `_parse_fm`）与 3 个 FM 字段分类常量（`_FM_SPECIAL` / `_FM_LIST` / `_FM_DICT`）收编为 `hma/fm_yaml.py` 模块级实现（265 行，零依赖）。

@@ -6,7 +6,7 @@
 
 ## 2026-09-07
 
-### `b3139b6` 回归 5 个 error 全修（仅 `time_iso.py` 属项目本身入库；4 项测试脚本改动落在 `AIMH-devkit/`，不入库）
+### `5daed94` 回归 5 个 error 全修（仅 `time_iso.py` 属项目本身入库；4 项测试脚本改动落在 `AIMH-devkit/`，不入库）
 
 - **`regress_aggregate.py`**：`events return_list` 断言写死 `len == n_evt`，但护栏 6 有 500 硬上限，而全仓 events 已 574 条 → 恒 FAIL。属测试自身 bug，改断言为 `min(n_evt, 500)`，护栏原样保留。17/17 → **ALL PASS**。
 - **`regress_obscure_recall.py`**：`PKG` 写成 `…/demo-origin`（9/06 脱敏机械改名的残留占位，文件并不存在）→ `Memory.read` 返 None → 走「无目标包」早退分支，`scope` 为 `{}`，测试读 `scope['label']` 崩 KeyError。**澄清契约**：`obscure_recall` 的 `package_id` 是「包路径 + 事件 stem」的**复合 id**（走 `Memory.read` 定位单个 `.md`），不是纯包 id。改为 `原创角色/维罗妮卡·夏·雪莱/veronica-origin`（背景故事，含「赎回」章）→ **4/4 PASS**。

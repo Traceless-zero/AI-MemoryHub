@@ -1092,6 +1092,21 @@ def parse_time_hint(text, now=None):
                 except ValueError:
                     ym.add((yy, mo))
 
+    # 中文相对时间预解析（委托 time_iso 模块：前天/上周三/最近三天…确定性封闭集）。
+    # 命中 → days/windows 注入（与英文级联叠加）；未命中 → 落回既有级联（零回归）。
+    # fail-open：预解析任何异常不阻断检索。
+    try:
+        from .time_iso import parse_text as _ti_parse
+        for _r in _ti_parse(t, today=now):
+            _y1, _m1, _d1 = (int(x) for x in _r["start"].split("-"))
+            days.add(date(_y1, _m1, _d1))
+            years.add(_y1)
+            _y2, _m2, _d2 = (int(x) for x in _r["end"].split("-"))
+            if (_y1, _m1, _d1) != (_y2, _m2, _d2):
+                windows.append((date(_y1, _m1, _d1), date(_y2, _m2, _d2)))
+    except Exception:
+        pass  # 预解析 fail-open
+
     return TimeHint(years, months, ym, days, windows)
 
 

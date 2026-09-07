@@ -1,0 +1,184 @@
+==========================================================================
+AIMH 入库目录清单   （git add / commit / push 前对账用）
+==========================================================================
+生成时间 : 2026-09-07 15:43:19
+生成方式 : python scripts/gen_track_manifest.py
+当前入库 : 98 个文件
+
+清单会过时。每次对账前先重跑上面的命令刷新本文件，再对照 git status。
+
+--------------------------------------------------------------------------
+一、不入库（硬规则）—— 出现即为事故
+--------------------------------------------------------------------------
+  [禁] scripts/tests/         测试脚本，用户明令不入库（2026-09-06 决策）
+  [禁] __pycache__/           字节码缓存
+  [禁] .pyc                   字节码缓存
+  [禁] memory/index.db        索引，可由 memory/**/*.md 全量重建
+  [禁] .workbuddy/            工作区私有状态与备份
+  [禁] to_delete/             用户自管，AI 不碰
+  [禁] node_modules/          依赖目录
+
+--------------------------------------------------------------------------
+二、应入库（目录白名单）
+--------------------------------------------------------------------------
+  [收] hma/                   引擎源码
+  [收] scripts/core/          确定性脚本
+  [收] scripts/               根目录脚本（不含 tests/）
+  [收] skills/                技能定义
+  [收] memory/                记忆正文——唯一权威源
+  [收] 网页控制台/                 网页控制台
+  [收] 项目其余资产/                项目资产
+
+--------------------------------------------------------------------------
+三、当前实际入库清单（98 个）
+--------------------------------------------------------------------------
+  hma/   (16)
+        __init__.py
+        cli.py
+        daylog.py
+        envelope.py
+        fm_schema.py
+        hma_core.py
+        import_common.py
+        import_entry.py
+        ingest.py
+        llm_adapter.py
+        recall_obscure.py
+        refine.py
+        routing.py
+        scoring_coeffs.py
+        server.py
+        tree.py
+  hma/engine/   (4)
+        __init__.py
+        __main__.py
+        dispatch.py
+        registry.py
+  hma/engine/handlers/   (4)
+        __init__.py
+        note.py
+        oc_dossier.py
+        packs.py
+  memory/项目/AIMH-design-journal/   (16)
+        SCHEMA.md
+        daylog设计.md
+        index.db存储规格.md
+        什么是AIMH系统.md
+        前端规范（网页控制台）.md
+        医学域包规范（一病一包与分阶段筛查）.md
+        召回消歧管线设计（实现）.md
+        外部技术对照：AIMH vs 主流检索与记忆方案.md
+        存储架构总览.md
+        工具与技能总览.md
+        工程红线与自检纪律.md
+        技术参考.md
+        拆包与收录规范.md
+        用户操作手册.md
+        询问类型与解决思路.md
+        领域检索后处理规范（法律+医疗）.md
+  scripts/   (2)
+        __init__.py
+        agent_loop_demo.py
+  scripts/core/   (25)
+        archive_paper.py
+        audit_comment_pins.py
+        audit_orphans.py
+        build_user_package.py
+        compact.py
+        daylog_append.py
+        deploy_mcp.py
+        derive_topic_views.py
+        lint_memory.py
+        mcp_launch.py
+        memory_append_section.py
+        migrate_claude_memory.py
+        migrate_codex_memory.py
+        migrate_gemini_memory.py
+        migrate_wb_memory.py
+        new_package.py
+        oc_registry.py
+        pdf_reflow.py
+        peek_index.py
+        periodic_review.py
+        rebuild_index.py
+        relocate_package.py
+        scan_fm.py
+        sync_skills.py
+        where.py
+  scripts/hooks/   (1)
+        aimh_recall_card_hook.py
+  skills/aimh-always/   (2)
+        SKILL.md
+        system_prompt_snippet.md
+  skills/aimh-always/references/   (1)
+        router.md
+  skills/aimh-daylog-archive/   (1)
+        SKILL.md
+  skills/aimh-ingest/   (1)
+        SKILL.md
+  skills/aimh-ingest/references/   (5)
+        branch-dialog.md
+        branch-paper.md
+        front_matter_5dim_example.md
+        ingest_prompt.txt
+        packs_template.md
+  skills/aimh-intake/   (1)
+        SKILL.md
+  skills/aimh-recall/   (1)
+        SKILL.md
+  skills/aimh-recall-diagnose/   (1)
+        SKILL.md
+  skills/aimh-recall/references/   (1)
+        recall_card.md
+  skills/aimh-worldbook/   (1)
+        SKILL.md
+  skills/oc-dossier/   (1)
+        SKILL.md
+  skills/oc-dossier/references/   (4)
+        dossier_build.py
+        flow.md
+        method.md
+        oc_classify.py
+  网页控制台/   (4)
+        marked.min.js
+        tree_server.py
+        一键启动.bat
+        目录结构树.html
+  项目其余资产/   (2)
+        AIMH系统设计的相关哲学思路.docx
+        未来的AGI该是什么样子.docx
+  （根目录）/   (4)
+        .gitignore
+        README.md
+        pyproject.toml
+        一键更新记忆索引.exe
+
+--------------------------------------------------------------------------
+四、可疑项（二进制 / 可执行 / 数据库类型 —— 逐条确认是否该入库）
+--------------------------------------------------------------------------
+    6380.8 KB  一键更新记忆索引.exe
+
+--------------------------------------------------------------------------
+五、体积提示（大源码文件，> 200 KB —— 仅供参考，照常入库，非可疑）
+--------------------------------------------------------------------------
+     232.5 KB  [源码·正常] hma/hma_core.py
+
+--------------------------------------------------------------------------
+六、当前未提交改动（git status --porcelain）
+--------------------------------------------------------------------------
+   M hma/hma_core.py
+  ?? hma/time_iso.py
+  ?? scripts/core/parse_time_iso.py
+  ?? scripts/gen_track_manifest.py
+  ?? scripts/run_all_regress.py
+  ?? 入库目录清单.txt
+  ?? 审计报告-AIMH-2026-09-06.html
+
+--------------------------------------------------------------------------
+七、对账步骤
+--------------------------------------------------------------------------
+  1. git status --short
+  2. 每个待提交文件对照第二节：目录是否在白名单内
+  3. 对照第一节：确认没混入禁用路径
+  4. 对照第四节：大文件与 exe/db 逐个确认
+  5. 全部通过再 git add / commit

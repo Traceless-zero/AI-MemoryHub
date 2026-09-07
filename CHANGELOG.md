@@ -6,6 +6,14 @@
 
 ## 2026-09-07
 
+### S3 拆分第三步：聚合+时间线抽至 `hma/aggregate_time.py`（hma_core 4022 → 3546 行）
+
+- **内容**：时间解析常量区（`_MONTH_ALIASES` / `_NUM_WORDS` / `_RE_ISO` / `_RE_YEAR` / `_PART_RANGE` 等十余个词表与正则，49 行）+ `TimeHint` / `parse_time_hint` / `_is_union_query` / `_time_tiebreak`（243 行）+ `_agg_build_where` / `db_aggregate` / `time_filter` / `_time_hard_match` 与 `_AGG_COL_WHITELIST` / `_AGG_UNITS` 双白名单（181 行）收编为 `aggregate_time.py`（496 行）。`Memory.aggregate` / `Memory.filter_by_time` 薄转发留在 hma_core（方法体零改动，靠 re-export 的后端名继续工作）。
+- **职责边界（docstring 钉死）**：`hma/time_iso.py` 只管【相对时间→绝对 ISO 换算】，`aggregate_time.parse_time_hint` 只管【从问句抽取时间意图 TimeHint】，防止两套时间逻辑再被混用。
+- **跨线依赖**：`_scope_clause`（检索侧三处共用）留守 hma_core，aggregate_time 内 `_scope_clause_late` 运行时延迟解析（S2 的 derive_anchors 同款手法）。
+- **过程中被仪器抓到的三个夹带/断链**（全量回归当场红）：① `_AGG_COL_WHITELIST` / `_AGG_UNITS` 物理位置在段 D 之前未被切走 → db_aggregate 断链，已随语义搬入；② `_anchor_heading_re` / `_anchor_sent_split` / `_anchor_table_sep` 三个锚点派生专属正则物理上夹在段 D 尾部被误带走 → derive_anchors 断链（4 个回归红），已搬回 hma_core 并修正注释-代码配对；③ 头部 import 漏 `json` / `sqlite3`，已补。
+- **验收**：全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**；S2 提交态（0b7013b）与 S3 态解析产物快照 **70/70 零差异**；最终 diff **12+/487-**（行尾 CRLF 直写，无全文件改写噪音）；`from hma.hma_core import parse_time_hint, db_aggregate, …` re-export 面验证通过，`Memory.aggregate('packages')=18`、`filter_by_time('上个月')` 返回 4 包与拆分前一致。
+
 ### S2 拆分第二步：EventPackage 整类抽至 `hma/event_package.py`（hma_core 4381 → 4022 行）
 
 - **内容**：`EventPackage` 全类（round-trip 序列化 / 写回门禁 / FM 解析别名绑定，285 行）+ 四要素兼容层三函数（`_as_four` / `_merge_legacy` / `_four_to_list`，91 行，仅被本类与 `Memory.write` 消费）收编为 `hma/event_package.py`（386 行）；`hma_core` 顶部 re-export 四个名字，外部 import 面（`hma/__init__`、`fm_schema.py`、`scripts/core/` 5 处、`lint_memory` 的 `_four_to_list`）**一行未改**。

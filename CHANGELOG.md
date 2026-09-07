@@ -6,6 +6,14 @@
 
 ## 2026-09-07
 
+### S5 拆分第四步：写入线抽至 `hma/write_path.py`（hma_core 3398 → 3191 行）
+
+- **内容**：`WriteMixin`（`write` / `_upsert` / `_write_back` / `link` / `check_write_integrity` 五方法，171 行）+ 路径护栏 `_in_tree` / `_safe_md_path`（P2-D 实现，语义归写入线，37 行）收编为 `write_path.py`（255 行）。`Memory` 改继承 `class Memory(_MechanicalLayer, WriteMixin)`——方法体逐字保留，五方法互调与跨线依赖（`self.read` / `self._conn` / `self._entity_feature_index` 等）由 MRO 运行时解析。
+- **留守与延迟解析**：`_entity_key` / `_search_blob` / `derive_anchors` / `Memory` 为跨线共享名留守 hma_core，write_path 内以 `_*_late()` 运行时延迟解析（避免循环 import，共 4 个包装）；`_merge_legacy` / `EventPackage` 直接从 event_package.py 导入。
+- **过程中被抓的三个搬迁陷阱**（护栏+全量当场红）：①切割脚本漏 `class WriteMixin:` 类头——五个方法被 Python 解析成 `_memory_cls_late` 的嵌套死函数，compileall 照样通过但 `ImportError`（教训：**compileall 只证语法，不证名字绑定**）；②漏 `_merge_legacy`（跨包已搬，直接 import 解决）；③漏 `re` import（`_safe_md_path` 用）。
+- **验收**：`regress_write_path_guard` **8/8**（P2-D 护栏随护栏实现搬迁后行为不变）；全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**；死代码清理态（4a07457）与 S5 态解析快照 **70/70 零差异**；最终 diff **4+/211-**；沙箱端到端 写→读→link→聚合 抽查 OK。
+- **豆包四线至此全部归位**：解析(fm_yaml) / 事件包(event_package) / 聚合时间(aggregate_time) / 写入(write_path)。hma_core 剩检索线 + Memory 组合体，等 S4（高风险，需用户在场）。
+
 ### 死代码清理：corpus_hit_rerank 链退役（hma_core 3547 → 3398 行，-153 行）
 
 - **背景**：2026-09-05 #05 裁决——`_abstain` 的 corpus_hit_rerank 文件粒度重排塌缩（BM25 分被丢弃、厚单文件包内密度并列退化标题序、beat12 300.4 沉底），排序职责死刑、hit_files 信号职责保留，函数体当时"保留为注释现场"（调用包在 `if False:`，daylog 标注"建议后续评估瘦身"）。本次按用户拍板执行删除，为 S4a 搬迁减负。

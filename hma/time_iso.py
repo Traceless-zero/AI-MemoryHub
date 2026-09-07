@@ -228,7 +228,22 @@ def parse(expr, today=None, _depth=0):
                 return {"kind": "range", "start": _iso(lo), "end": _iso(hi)}
             return {"kind": "range", "start": f"{y}-01-01", "end": f"{y}-12-31"}
 
-    # ③ 裸细化词（无粒度前缀 → 默认本周/本月）：周三 / 礼拜五 / 月底
+    # ③ 裸月份（无相对前缀 → 锚点年内的绝对月）：3月份 / 11月 / 三月
+    #    年内不存在的月（13月）→ 未识别，不静默修正；可再细化「3月5号」
+    m = re.fullmatch(r"([0-9一二三四五六七八九十]{1,3})月份?(.*)", e)
+    if m:
+        mm = _cn_to_int(m.group(1))
+        if mm is not None and 1 <= mm <= 12:
+            lo = dt.date(today.year, mm, 1)
+            hi = (lo.replace(day=28) + dt.timedelta(days=4)).replace(day=1) - dt.timedelta(days=1)
+            rest = m.group(2).strip()
+            if rest:
+                # 有日级细化词却落不了地（如 2月30号）→ 未识别，绝不静默退回整月
+                return _within_month(lo, hi, rest, today)
+            return {"kind": "range", "start": _iso(lo), "end": _iso(hi)}
+        return None
+
+    # ④ 裸细化词（无粒度前缀 → 默认本周/本月）：周三 / 礼拜五 / 月底
     m = re.fullmatch(r"(?:礼拜|周)([一二三四五六日天])", e)
     if m:
         lo, hi = _week_span(today, 0)
@@ -237,7 +252,7 @@ def parse(expr, today=None, _depth=0):
         lo, hi = _month_span(today, 0)
         return _within_month(lo, hi, e, today)
 
-    # ④ 裸时段词（默认今天 + 时段窗口）
+    # ⑤ 裸时段词（默认今天 + 时段窗口）
     if e in TOD_TABLE:
         return {"kind": "day", "start": _iso(today), "end": _iso(today),
                 "tod": {"name": e, "from": TOD_TABLE[e][0], "to": TOD_TABLE[e][1]}}
@@ -254,6 +269,7 @@ def parse_text(text, today=None):
         r"(?:凌晨|半夜|早上|早晨|上午|中午|下午|傍晚|晚上|深夜)?"
         r"|上周|本周|这周|下周|(?:上|这|本|下)个?月|去年|今年|明年|前年"
         r"|(?:上周|本周|这周|下周|这|本)?(?:礼拜|周)[一二三四五六日天]"
+        r"|[0-9一二三四五六七八九十]{1,3}月份?(?:[0-9一二三四五六七八九十]{1,3}\s*[号日])?"
         r"|(?:上|这|本|下)个?月(?:初|中|底)|月初|月中|月底")
     for m in pat.finditer(text):
         expr = m.group(0)

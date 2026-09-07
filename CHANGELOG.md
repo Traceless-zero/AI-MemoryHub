@@ -6,6 +6,17 @@
 
 ## 2026-09-07
 
+### P2-D 写侧越界修复：`memory/` 树内外隔离（护栏 1/8 → 8/8）
+
+- **问题**：豆包审计 P2-D「防护不对称：读侧严、写侧松」。`Memory.write` / `read` 直接 `os.path.join(events_dir, f"{id}.md")`，`id` 由 MCP 入参透传。沙箱实锤 6 条越界路径全通：`../` 相对穿越、绝对路径（`join` 遇绝对路径丢弃左侧）、盘符形态、反斜杠 `..\`、读侧越界读取、树外既有 `.md` 被覆盖，且树外 filepath 会污染 index.db（`uninstall(rm=True)` 同源问题可 `rmtree` 树外目录，危害更大）。
+- **改动**：
+  - `hma/hma_core.py`：新增 `_in_tree` / `_safe_md_path`（归一 `\`→`/` 后按 `root+os.sep` 前缀比对，禁空/禁绝对/禁盘符/禁 `/` 开头，全 fail-closed）；`write` 落盘前、`read` 的 db-first 命中结果与 fallback、`uninstall` 删除前统一走校验。
+  - `hma/server.py`：`_h_write` 补 `try/except`，`ValueError` → `(WRITE_GUARD: …) 写入被拒`（原为全文件唯一无兜底 handler）。
+  - `scripts/core/new_package.py`：`path_soft_check` 拆 `(hard, soft)` 两级，绝对路径/盘符/`..`穿越归 hard 拒绝（原只有软提醒且不含 `..` 检测）。
+- **两个实现要点**：①**归一不是禁反斜杠**——`list_all_in_scope` 返回 `人物\雪莱（诗人）\shelley-poet` 形态，禁 `\` 会把 68 条既有事件全判非法（`bench_aimh_internal_groups` 当场红）；②**Python 3.13 起 Windows 上 `isabs("/x")` 返回 False**，单 `/` 开头须显式补捕。
+- **验证**：新增护栏 `AIMH-devkit/tests/regress_write_path_guard.py` 8 用例（红基线 1/8 → 修复后 **8/8**）；引擎边界抽查 `/evil` / UNC / `C:/x` / `../x` 全拒、正常 id 放行；既有 68 条事件 read 全恢复（0 失败）；全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**。真实库 68 条事件扫描：树外 filepath 0 条，无历史污染。
+- **定性**：本地单用户工具的误操作护栏缺失（触发路径＝AI 被注入诱导或手滑拼错 id），非高危远程漏洞；防护与读侧（控制台穿越检查、db_aggregate 白名单）对齐。
+
 ### `5daed94` 回归 5 个 error 全修（仅 `time_iso.py` 属项目本身入库；4 项测试脚本改动落在 `AIMH-devkit/`，不入库）
 
 - **`regress_aggregate.py`**：`events return_list` 断言写死 `len == n_evt`，但护栏 6 有 500 硬上限，而全仓 events 已 574 条 → 恒 FAIL。属测试自身 bug，改断言为 `min(n_evt, 500)`，护栏原样保留。17/17 → **ALL PASS**。

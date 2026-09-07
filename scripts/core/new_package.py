@@ -316,8 +316,19 @@ def do_import(target, fill, body_file, keep_updated):
 
 
 def path_soft_check(path):
-    warns = []
+    """路径检查。返回 (hard, soft)：hard=必须拒绝的错误，soft=仅提醒。
+
+    P2-D 同源收紧：此前只做「在不在 memory/ 下」软提醒，且不含 .. 检测——
+    `memory/../../x` 这类穿越只被 warn 不会被拦。现穿越/绝对路径归 hard 拒绝。
+    """
+    hard, warns = [], []
     norm = path.replace("\\", "/").strip("/")
+    if os.path.isabs(path) or re.match(r"^[A-Za-z]:", norm) or norm.startswith("/"):
+        # 注意：Python 3.13 起 Windows 上 isabs("/x") 返回 False（无盘符根不算绝对），
+        # 故单 / 开头须显式补捕
+        hard.append("目标是绝对路径 / 盘符（拒绝）")
+    elif ".." in norm.split("/"):
+        hard.append("路径含 .. 穿越（拒绝）")
     if not (norm == "memory" or norm.startswith("memory/")):
         warns.append("目标不在 memory/ 下（单存储原则：记忆只进 memory/）")
     segs = [s for s in norm.split("/") if s][1:]  # 去掉 memory 本身
@@ -325,7 +336,7 @@ def path_soft_check(path):
         if re.fullmatch(r"[A-Za-z0-9._-]+", s):
             warns.append(f"目录段「{s}」为纯 ASCII —— R59：新建文件夹一律中文（用户明确要求英文除外）")
             break
-    return warns
+    return hard, warns
 
 
 def main(argv=None):
@@ -366,8 +377,13 @@ def main(argv=None):
             ap.error(f"--module-set 须为：{' / '.join(MODULE_SETS)}")
         if not (a.path and a.project):
             ap.error("--module-set 需 --path=memory/项目/<项目名> 与 --project <项目名>")
-        for w in path_soft_check(a.path):
+        hard, soft = path_soft_check(a.path)
+        for w in soft:
             print(f"[warn] {w}")
+        if hard:
+            for e in hard:
+                print(f"[reject] {e}")
+            return 1
         created, skipped = [], []
         for out, md in build_module_set(a.module_set, a.project, a.path):
             if os.path.exists(out):
@@ -388,8 +404,13 @@ def main(argv=None):
         ap.error("--path 与 --id 必填（或用 --print-dict 只看模板 / --module-set 整集生成）")
     out = a.out or os.path.join(a.path, a.pid + ".md")
 
-    for w in path_soft_check(a.path):
+    hard, soft = path_soft_check(a.path)
+    for w in soft:
         print(f"[warn] {w}")
+    if hard:
+        for e in hard:
+            print(f"[reject] {e}")
+        return 1
 
     if os.path.exists(out) and not a.force:
         print(f"[x] 目标已存在（拒绝覆盖，防手滑毁包）：{out}\n    确认要覆盖请加 --force；改归类请走 aimh-relocate。")

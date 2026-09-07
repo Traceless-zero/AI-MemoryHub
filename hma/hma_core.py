@@ -121,6 +121,46 @@ ABSTAIN_HIGH_K = 0.67   # 覆盖度 ≥ 此值 → confidence=high，否则 low
 ABSTAIN_DEFAULT_MSG = ("未查询到与查询词相关的记忆内容。请判断：是查询表述过窄/模糊"
                        "需要进一步向用户澄清，还是确无相关内容应明确告知用户。")
 
+
+# ==================== 路径护栏（P2-D：写侧/读侧不得越出记忆树）====================
+# 背景：Memory.write / read 曾直接 os.path.join(events_dir, f"{id}.md")，而 id 由
+# MCP 入参透传（memory_write 的 id 字段）。id 含 `../` 即可读写 memory 树外，
+# 绝对路径 id 更直接——os.path.join 遇绝对路径会丢弃左侧，连目录都不用跳——
+# 可落到文件系统任意位置，并把树外 filepath 污染进 index.db。
+# 护栏回归：AIMH-devkit/tests/regress_write_path_guard.py（红基线 1/8，修复后 8/8）。
+
+def _in_tree(path, root):
+    """path 是否在 root 树内。abspath 归一后按 root+sep 前缀比对。
+
+    加 os.sep 是为了防「同前缀不同目录」钻空子：root=/a/memory 时，
+    /a/memoryevil 不能以 startswith 蒙混过关。
+    """
+    p = os.path.abspath(path)
+    r = os.path.abspath(root)
+    return p == r or p.startswith(r + os.sep)
+
+
+def _safe_md_path(events_dir, id):
+    """id → 树内 .md 绝对路径；越界/绝对/空/异常一律 ValueError（fail-closed）。
+
+    id 语义：相对 events_dir 的复合路径，不含 .md 后缀，用 / 分隔（可含中文）。
+    """
+    if not id or not isinstance(id, str):
+        raise ValueError("id 必须是非空字符串")
+    # 归一而不是禁止：Windows 侧引擎内部大量用 \ 分隔（list_all_in_scope 返回的
+    # 就是 `人物\雪莱（诗人）\shelley-poet` 形态），禁反斜杠会把全部既有事件判非法。
+    # 归一成 / 后，`..\outside\x` 与 `../outside/x` 同样由下面的树内校验拦下。
+    norm = id.replace("\\", "/")
+    if os.path.isabs(id) or os.path.isabs(norm) or re.match(r"^[A-Za-z]:", norm):
+        raise ValueError(f"id 不得为绝对路径 / 盘符 / UNC（收到 {id!r}）")
+    if norm.startswith("/"):
+        raise ValueError(f"id 不得以 / 开头（收到 {id!r}）")
+    p = os.path.abspath(os.path.join(os.path.abspath(events_dir), norm + ".md"))
+    if not _in_tree(p, events_dir):
+        raise ValueError(f"id 越出 memory 树（解析为 {p}）")
+    return p
+
+
 class _MechanicalLayer:
     """拒答 + 理解链路的确定性方法集合，由 hma_core.Memory 继承。"""
 
@@ -2059,7 +2099,7 @@ class Memory(_MechanicalLayer):
         if existing and created is None:
             pkg.created = existing.created
 
-        path = os.path.join(self.events_dir, f"{id}.md")
+        path = _safe_md_path(self.events_dir, id)   # P2-D：越界/绝对路径在此被拒
         # 读磁盘现有正文（供门禁做覆盖保护）
         existing_body = ""
         if os.path.exists(path):
@@ -3834,8 +3874,15 @@ class Memory(_MechanicalLayer):
                 "SELECT filepath FROM events WHERE REPLACE(filepath, '\\', '/') LIKE ? LIMIT 1",
                 ("%/" + id + ".md",)).fetchone()
         path = row[0] if (row and row[0]) else None
+        # P2-D：索引里的 filepath 若已被污染到树外（历史脏数据 / 外部改库），
+        # 一律不采信——否则 db-first 会绕开下面的 _safe_md_path 直接读树外。
+        if path and not _in_tree(path, self.events_dir):
+            path = None
         if not path or not os.path.exists(path):
-            path = os.path.join(self.events_dir, f"{id}.md")
+            try:
+                path = _safe_md_path(self.events_dir, id)
+            except ValueError:
+                return None
             if not os.path.exists(path):
                 return None
         with open(path, "r", encoding="utf-8") as f:
@@ -4181,6 +4228,9 @@ class Memory(_MechanicalLayer):
         c.execute("DELETE FROM events WHERE package_id=?", (package_id,))
         if rm:
             target = os.path.join(self.repo, package_id)
+            # P2-D 同源：rmtree 前必须确认落点在仓库树内且不是仓库根本身
+            if not _in_tree(target, self.repo) or os.path.abspath(target) == os.path.abspath(self.repo):
+                raise ValueError(f"package_id 越出仓库树或指向仓库根：拒绝删除（{package_id!r}）")
             if os.path.isdir(target):
                 shutil.rmtree(target, ignore_errors=True)
         return package_id

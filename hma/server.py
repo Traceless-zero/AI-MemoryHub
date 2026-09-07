@@ -346,21 +346,26 @@ def _h_write(root, a):
         if existing:
             body = existing
     body = body or ""
-    path = m.write(
-        id=a["id"],
-        title=a.get("title", "") or a["id"],
-        summary=a.get("summary", "") or "",
-        tags=a.get("tags") or [],
-        linked=a.get("linked") or [],
-        body=body,
-        anchors=a.get("anchors"),
-        person=a.get("person"),
-        location=a.get("location"),
-        topic=a.get("topic"),
-        event_date=a.get("event_date"),
-        pkage_created=a.get("pkage_created"),
-        pkage_updated=a.get("pkage_updated"),
-    )
+    # P2-D：id 越界 / 绝对路径由引擎 _safe_md_path 拒，此处转成人类可读消息
+    # （本文件其余 handler 都有 guard 包装，_h_write 原先是唯一裸奔的）
+    try:
+        path = m.write(
+            id=a["id"],
+            title=a.get("title", "") or a["id"],
+            summary=a.get("summary", "") or "",
+            tags=a.get("tags") or [],
+            linked=a.get("linked") or [],
+            body=body,
+            anchors=a.get("anchors"),
+            person=a.get("person"),
+            location=a.get("location"),
+            topic=a.get("topic"),
+            event_date=a.get("event_date"),
+            pkage_created=a.get("pkage_created"),
+            pkage_updated=a.get("pkage_updated"),
+        )
+    except ValueError as e:
+        return f"(WRITE_GUARD: {e}) 写入被拒"
     return f"written: {path}"
 
 

@@ -6,6 +6,14 @@
 
 ## 2026-09-07
 
+### S1 拆分第一步：FM/YAML 解析器抽至 `hma/fm_yaml.py`（hma_core 4567 → 4381 行）
+
+- **内容**：按拆分计划（豆包 P2-B 落地方案）执行 S1——`EventPackage` 的 11 个解析 staticmethod（`_strip_comment` / `_scalar_or_json` / `_parse_value` / `_parse_inline` / `_is_kv` / `_empty_default` / `_parse_seq` / `_parse_mapping` / `_parse_node` / `_normalize_anchor_kws` / `_parse_fm`）与 3 个 FM 字段分类常量（`_FM_SPECIAL` / `_FM_LIST` / `_FM_DICT`）收编为 `hma/fm_yaml.py` 模块级实现（265 行，零依赖）。
+- **搬法**：`EventPackage` 上保留 `staticmethod` 别名绑定（`_parse_fm = staticmethod(fm_yaml.parse_fm)` 等 11 条），**调用点零改动**——搬迁前 grep 确认 11 方法 + 3 常量仅在 hma_core 内部引用（18 处），无外部调用、无 monkey-patch 点。
+- **验收**：`regress_fm_yaml` 6/6；全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**；**FM 基线快照比对 70/70 零差异**（搬迁前后对全部 70 个 `.md` 逐字比对解析产物：title/summary/tags/linked/四要素/anchors/event_date/body_sha1）。
+- **新增工具**：`AIMH-devkit/tests/_fm_dump.py`（dump/diff 两命令，S2-S5 搬迁验收复用；快照含语料内容，比对完即删）。
+- **性质**：纯搬迁、零行为变化；`parse_value` 的 fail-closed 语义原样随迁。
+
 ### P2-D 写侧越界修复：`memory/` 树内外隔离（护栏 1/8 → 8/8）
 
 - **问题**：豆包审计 P2-D「防护不对称：读侧严、写侧松」。`Memory.write` / `read` 直接 `os.path.join(events_dir, f"{id}.md")`，`id` 由 MCP 入参透传。沙箱实锤 6 条越界路径全通：`../` 相对穿越、绝对路径（`join` 遇绝对路径丢弃左侧）、盘符形态、反斜杠 `..\`、读侧越界读取、树外既有 `.md` 被覆盖，且树外 filepath 会污染 index.db（`uninstall(rm=True)` 同源问题可 `rmtree` 树外目录，危害更大）。

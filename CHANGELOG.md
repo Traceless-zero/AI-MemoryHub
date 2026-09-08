@@ -6,6 +6,16 @@
 
 ## 2026-09-08
 
+### time_iso 边界语义接通全链路：`X之前/X以来` 可达硬过滤与软加权（新护栏 11/11）
+
+- **缺口（实测钉死）**：`parse_text` 扫描正则不含边界词 → "大前天之前"被窄化成"大前天"单日（硬过滤 1 包）、"去年以来"被窄化成"去年"一整年（**命中 0 包**，2026 年事件全被排除——语义错误而非无数据）。根因：`parse()` 单表达式支持 `before/after`（via `_BOUNDARY_RE`），但扫描模式正则没带；且 `TimeHint` 模型没有承载方向性开区间的字段。
+- **改动**（三处）：
+  1. `hma/time_iso.py`：`parse_text` 主正则各备选补 `(?:之前|以前|以来|之后|以后)?` 可选后缀——扫描模式与 `parse()` 边界语义对齐。
+  2. `hma/core/aggregate_time.py`：`TimeHint` 加 `before_date` / `after_date` 字段（`__slots__`/`__init__`/`__bool__` 同步）；`match`（软加权）与 `_time_hard_match`（硬过滤）两处消费端支持开区间放行；委托循环从"单条异常整批丢弃"改为**逐条防御**（`continue`），before/after 显式接住（多条边界取更早者）。
+  3. 新护栏 `AIMH-devkit/tests/regress_time_boundary.py`（11 用例，锚点 2026-09-06）：扫描抽取 → 意图字段 → 软加权正反向 → 硬过滤端到端（真实库只读）→ 混合句并存。
+- **验收**：新护栏红基线 **8 FAIL → 11/11 ALL PASS**；无回归——`regress_time_iso` **36/36**、`regress_time_recall` ALL PASS、解析快照 **70/70 零差异**；全量回归 **25 干净 / 0 语法 / 0 失败（GREEN）**。实测对照："去年以来" **0 包 → 8 包**（含今年事件）；"大前天之前" 单日 → 开区间（软加权 2026-08-01 命中、09-05 不命中）。
+- **定性**：语义扩展（新能力），非 bug 修复；护栏先行（红 8 → 绿 11）。
+
 ### 拆出模块归类：5 个新模块收进 `hma/core/` 子包
 
 - **内容**：`fm_yaml` / `event_package` / `aggregate_time` / `write_path` / `retrieval` 五个 S1–S5 拆出模块，用 `git mv` 收进 `hma/core/`（保留文件历史），新建 `hma/core/__init__.py` 声明"内部子包，外部不应直接 import"。`hma/` 根目录从 24 个文件降到 19 个，五线模块各归其位。

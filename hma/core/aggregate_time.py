@@ -80,17 +80,23 @@ class TimeHint:
     计分只会把噪声抬到与真实信号同级。
     """
 
-    __slots__ = ("years", "months", "ym", "days", "windows")
+    __slots__ = ("years", "months", "ym", "days", "windows",
+                 "before_date", "after_date")
 
-    def __init__(self, years=None, months=None, ym=None, days=None, windows=None):
+    def __init__(self, years=None, months=None, ym=None, days=None, windows=None,
+                 before_date=None, after_date=None):
         self.years = set(years or ())
         self.months = set(months or ())
         self.ym = set(ym or ())
         self.days = set(days or ())
         self.windows = list(windows or ())
+        # 方向性开区间（S4 边界语义）：X之前 / X以来（after = 自该日起至今）
+        self.before_date = before_date
+        self.after_date = after_date
 
     def __bool__(self):
-        return bool(self.years or self.months or self.ym or self.days or self.windows)
+        return bool(self.years or self.months or self.ym or self.days
+                    or self.windows or self.before_date or self.after_date)
 
     @property
     def fine(self):
@@ -120,6 +126,12 @@ class TimeHint:
                 # 窄窗口（≤11 天，含 early/mid/late 的旬窗）视为日级命中；
                 # 相对时间的宽容差窗口只算月级，避免把模糊线索抬到与精确日同级。
                 return 3 if (hi - lo).days <= 11 else 2
+        # 方向性开区间（边界语义）：X之前 / X以来——宽语义，给年级分（1），
+        # 只偏不强制；硬过滤另有消费（_time_hard_match 对 before/after 直接放行）。
+        if day and self.before_date and day <= self.before_date:
+            return 1
+        if day and self.after_date and day >= self.after_date:
+            return 1
         if (y, mo) in self.ym:
             return 2
         if mo in self.months:
@@ -150,6 +162,7 @@ def parse_time_hint(text, now=None):
         now = date(int(m.group(1)), int(m.group(2)), int(m.group(3) or 1)) if m else None
 
     years, months, ym, days, windows = set(), set(), set(), set(), []
+    before_date, after_date = None, None
 
     for m in _RE_ISO.finditer(t):
         y, mo = int(m.group(1)), int(m.group(2))
@@ -251,21 +264,39 @@ def parse_time_hint(text, now=None):
                     ym.add((yy, mo))
 
     # 中文相对时间预解析（委托 time_iso 模块：前天/上周三/最近三天…确定性封闭集）。
-    # 命中 → days/windows 注入（与英文级联叠加）；未命中 → 落回既有级联（零回归）。
-    # fail-open：预解析任何异常不阻断检索。
+    # 命中 → days/windows 注入（与英文级联叠加）；before/after → 方向性开区间字段。
+    # 逐条防御：单条异常 continue，绝不整批放弃（fail-open 的正确粒度）。
     try:
         from ..time_iso import parse_text as _ti_parse
-        for _r in _ti_parse(t, today=now):
-            _y1, _m1, _d1 = (int(x) for x in _r["start"].split("-"))
-            days.add(date(_y1, _m1, _d1))
-            years.add(_y1)
-            _y2, _m2, _d2 = (int(x) for x in _r["end"].split("-"))
-            if (_y1, _m1, _d1) != (_y2, _m2, _d2):
-                windows.append((date(_y1, _m1, _d1), date(_y2, _m2, _d2)))
     except Exception:
-        pass  # 预解析 fail-open
+        _ti_parse = None
+    if _ti_parse is not None:
+        for _r in _ti_parse(t, today=now):
+            try:
+                kind = _r.get("kind")
+                if kind == "before":
+                    _y, _m, _d = (int(x) for x in _r["boundary"].split("-"))
+                    bd = date(_y, _m, _d)
+                    if before_date is None or bd < before_date:
+                        before_date = bd
+                    continue
+                if kind == "after":
+                    _y, _m, _d = (int(x) for x in _r["boundary"].split("-"))
+                    ad = date(_y, _m, _d)
+                    if after_date is None or ad < after_date:
+                        after_date = ad
+                    continue
+                _y1, _m1, _d1 = (int(x) for x in _r["start"].split("-"))
+                days.add(date(_y1, _m1, _d1))
+                years.add(_y1)
+                _y2, _m2, _d2 = (int(x) for x in _r["end"].split("-"))
+                if (_y1, _m1, _d1) != (_y2, _m2, _d2):
+                    windows.append((date(_y1, _m1, _d1), date(_y2, _m2, _d2)))
+            except (KeyError, ValueError):
+                continue  # 单条形态未支持：跳过该条，不影响同批其余结果
 
-    return TimeHint(years, months, ym, days, windows)
+    return TimeHint(years, months, ym, days, windows,
+                    before_date=before_date, after_date=after_date)
 
 
 # 并集/聚合意图识别（缺口 ②）：仅保留真·聚合词；「这些/那些/各」只是指示代词不算。
@@ -490,6 +521,19 @@ def _time_hard_match(th, edate):
         for lo, hi in th.windows:
             if day and lo <= day <= hi:
                 return True
+    # 方向性开区间（边界语义）：X之前 / X以来——开区间直接放行
+    if d and th.before_date:
+        try:
+            if date(y, mo, d) <= th.before_date:
+                return True
+        except ValueError:
+            pass
+    if d and th.after_date:
+        try:
+            if date(y, mo, d) >= th.after_date:
+                return True
+        except ValueError:
+            pass
     if (y, mo) in th.ym:
         return True
     if th.ym and y in {yy for (yy, _) in th.ym} and mo in th.months:

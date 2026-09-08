@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-09-08
+
+### S4a 拆分第五步（检索线 · 机械层）：`_MechanicalLayer` 抽至 `hma/retrieval.py`（hma_core 3191 → 2735 行）
+
+- **内容**：`_MechanicalLayer` 全类（444 行，11 方法：候选生成 / 重排过滤 / 实体词表 / **拒答四道闸**）+ 拒答层三常量（`ABSTAIN_KAPPA` / `ABSTAIN_HIGH_K` / `ABSTAIN_DEFAULT_MSG`）收编为 `retrieval.py`（483 行）。`Memory` 的 MRO 变为 `Memory → _MechanicalLayer → WriteMixin → object`（继承链不变，方法体逐字保留）。
+- **跨线处理**：`_FUNCTIONAL_CHARS` / `_GENERIC_TERMS` 是 Memory 类属性（经 `self.` 被机械层方法访问）→ 保持不动，由 MRO 运行时解析；`_flat_variants` / `_is_garbage_bigram` 跨线共享（与 `normalize_terms` 同属机械切分词法）→ 留守 hma_core，retrieval 内以 `_*_late()` 延迟解析。
+- **开工前先锁基线**（S4 唯一高风险块，按计划执行）：bench_veronica 可答 20/20 + 对抗 5/5、regress_abstain 4/4、解析快照 70 条。
+- **验收（与基线逐项对齐）**：`bench_veronica_20_5` **可答 20/20（0 误拒）+ 对抗 5/5（0 漏拒）**——拒答闸命门未退化；`regress_abstain` **4/4**；解析快照 **70/70 零差异**；全量回归 **24 干净 / 0 语法 / 0 失败（GREEN）**；最终 diff **3+/459-**。
+- **新增 import 冒烟步骤**（S5 教训）：compileall 只证语法不证名字绑定，搬迁后必跑一次 `from hma.hma_core import Memory, _MechanicalLayer, ABSTAIN_*` 确认名字绑定成立（本次一次通过）。
+
+---
+
 ## 2026-09-07
 
 ### S5 拆分第四步：写入线抽至 `hma/write_path.py`（hma_core 3398 → 3191 行）

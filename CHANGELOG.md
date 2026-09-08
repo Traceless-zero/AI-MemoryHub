@@ -6,6 +6,13 @@
 
 ## 2026-09-08
 
+### 一键更新记忆索引.exe 重打包（PyInstaller 6.21，同 8/29 方法）
+
+- **背景**：exe 内嵌引擎停在 8/29 v1.0（无 core/ 五模块）——不含 FM fail-closed、P2-D 越界防护、裸月份、边界语义。全库审查 #1（P1）。
+- **打包**：`pyinstaller --onefile --console --name 一键更新记忆索引 --paths <repo> scripts/core/rebuild_index.py`（复刻 daylog-2026-08-29 #06 方法；中间物落 devkit 后清理；PyInstaller 跨盘符 relpath 限制 → spec/build/dist 须与脚本同盘）。
+- **验证**：exe `--no-gui` 真仓库重建 **68 条事件、exit 0**；内嵌模块含 write_path/aggregate_time/fm_yaml/time_iso/retrieval（core/ 五模块齐）；体积 6.5MB → 8.1MB（新增模块）。
+- **验证方法备注**：onefile 压缩后 exe 二进制里搜源码字符串全部落空（PYZ zlib 压缩），"字符串搜不到"≠模块缺失——以构建输入（git 干净 + 源 mtime 早于构建）与行为验证为准。
+
 ### 全库审查第一批修复：未使用 import + 墓碑注释 + skill 双副本同步
 
 - **#3 未使用 import**：`hma_core` 删 `import math` / `from collections import Counter` / `timedelta` / `from .core import fm_yaml` 四项——S4b 搬迁残留（检索侧已随迁），`grep -c` 确认各仅 import 行出现 1 次。

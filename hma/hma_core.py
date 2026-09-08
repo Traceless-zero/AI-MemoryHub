@@ -310,7 +310,7 @@ class Memory(_MechanicalLayer, WriteMixin, RetrievalMixin):
         self._blob_populated，后续直接命中缓存（零额外开销）。
 
         - True  ：所有行已填充（正常 rebuild 后的库）→ 三处 corpus SQL 函数
-                  （_corpus_blob_candidates / _entity_in_corpus / _rare_entities）
+                  （_entity_in_corpus）
                   可安全走 LIKE 快速路径；NULL 行不存在，不会漏命中→误拒答。
         - False ：仍有 NULL 行（旧库未 rebuild_all，search_blob 全空）→ 三处
                   函数退回逐文件 body 扫描兜底，绝不因 LIKE 漏 NULL 行而假拒答。

@@ -35,6 +35,9 @@ RETAINED = {
         "llm_adapter 工具循环接线预留（同上）",
     "mark_as_complete":
         "FM 补全语义（AI 显式补全且 keywords 必填），regress_tomarkdown_gate 钉住",
+    "_rare_entities":
+        "稀有实体筛选（blob+body 两段打捞）：corpus_hit_rerank 废除后生产暂无消费者，"
+        "regress_daylog_append E 段钉住打捞行为，供 Gate1 语料包含性未来扩展复用（2026-09-09 裁决）",
 }
 
 # 框架回调：宿主库按名字调用，仓库内无 Name 引用属正常。

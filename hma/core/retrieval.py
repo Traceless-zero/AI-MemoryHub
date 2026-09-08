@@ -2,9 +2,9 @@
 """retrieval —— 检索线机械层（S4a 拆分自 hma_core）。
 
 _MechanicalLayer：拒答与理解链路的确定性方法集合（零 ML、可测试、模型换代不漂）：
-  候选生成  _corpus_top_term_hit_files / _corpus_blob_candidates / _entity_in_corpus
+  实体判定  _entity_in_corpus（拒答路径存在性判定，blob+body 两段打捞）
   重排过滤  _relevance_filter
-  实体词表  _entity_vocab / _clean_entities / _rare_entities
+  实体词表  _entity_vocab
   拒答闸    _abstain（四道闸 + 语料包含性判定，系统 faithfulness 的机械守门员）
 由 hma_core.Memory 继承（与 WriteMixin 并列），方法内 self.* 依赖由 MRO 运行时解析。
 _ABSTAIN_* 三常量为拒答层阈值，随迁至此；hma_core 经 re-export 供 Memory 检索方法使用。
@@ -28,9 +28,6 @@ from .aggregate_time import (  # S3 已外拆的时间意图/闸，无循环依�
 )
 
 
-def _flat_variants_late(fld):
-    from .. import hma_core
-    return hma_core._flat_variants(fld)
 
 
 def _is_garbage_bigram_late(t):
@@ -90,59 +87,12 @@ class _MechanicalLayer:
         vocab = set()
         for p, loc, top, d in rows:
             for fld in (p, loc, top):
-                for v in _flat_variants_late(fld):
+                for v in _flat_variants(fld):
                     if v:
                         vocab.add(str(v).lower())
             if d:
                 vocab.add(str(d).lower())
         return vocab
-
-    @staticmethod
-    def _is_cjk(ch):
-        o = ord(ch)
-        return 0x4E00 <= o <= 0x9FFF or 0x3400 <= o <= 0x4DBF
-
-    @staticmethod
-    def _boundary_hit(term, text_l):
-        """CJK 词边界感知的子串命中：term 在 text_l 中出现，且匹配位置前/后字符
-        非 CJK（即 term 是独立词、而非更长 CJK 词的子串）才计命中。
-
-        治本修复拒答层 2 字 bigram 子串碰撞：计算⊂计算机 / 公司⊂待办 /
-        世界⊂AIMH系统 / 小说⊂背景小说 这类「长词恰好含 2 字查询词」不再误判为
-        语料有该实体（域外问题正常拒答）；而 误删(后接空格) / 写给(独立词) 等
-        真事实词仍正常命中 → body-only 事实可被语料包含性兜底召回。
-
-        后缀例外（2026-08-19 R1）：term 后紧跟方位/领域后缀（界/内/中/部…）时
-        仍计独立命中——中文无空格，2 字真实体常出现在「宝石界/宝石内部」这类
-        「词根+后缀」组合里，严格前后非 CJK 会误拒（黄蓝色的宝石→示例信物
-        查询被 low_coverage 误拒的根因）。后缀集只收方位/领域后缀，不收实词
-        成分（机/司），故 计算⊂计算机 类碰撞仍正确拒绝。
-        """
-        tl = (term or "").lower()
-        if not tl or tl not in text_l:
-            return False
-        n = len(text_l)
-        L = len(tl)
-        start = 0
-        while True:
-            i = text_l.find(tl, start)
-            if i < 0:
-                return False
-            before_ok = (i == 0) or (not _MechanicalLayer._is_cjk(text_l[i - 1]))
-            j = i + L
-            if j >= n:
-                after_ok = True
-            else:
-                aj = text_l[j]
-                # 后是方位/领域后缀 → 视为独立词（词根+后缀组合）；否则须非 CJK
-                after_ok = (aj in _MechanicalLayer._SUFFIX_FREE) or (not _MechanicalLayer._is_cjk(aj))
-            if before_ok and after_ok:
-                return True
-            start = i + 1
-
-    # 方位/领域后缀：term+后缀 仍算独立词（宝石界/宝石内部 = 宝石+界/内 是词根+后缀组合，
-    # 非子串碰撞；计算⊂计算机/公司⊂待办 的后缀是实词成分(机/司)，不在本集 → 仍判碰撞）
-    _SUFFIX_FREE = set("界内外中里部上下间处区域层心端口位带")
 
     def _clean_entities(self, terms):
         """从查询 terms 中滤出「干净实体/概念词」：去掉含疑问·功能字的问句壳、
@@ -163,6 +113,12 @@ class _MechanicalLayer:
         return out
 
     def _rare_entities(self, terms, pid=None):
+        """（恢复·声明保留）筛出查询中「稀有特异实体」：出现于 <50% 作用域文件的词。
+
+        生产当前无直接消费者（corpus_hit_rerank 重排 2026-09-05 废除）；保留原因：
+        regress_daylog_append.py E 段钉住其 blob+body 两段打捞行为（正文高频词
+        不被 blob 计 0 误判稀有），供 Gate1 语料包含性未来扩展复用。
+        """
         """从 clean entities 中筛出「稀有特异实体」：出现在作用域文件比例 < 50%
         的词（如 四要素/CEMA/学历/泥沼）。排除全局高频词（AIMH 几乎每文件都提，
         无判别力）。供语料包含性判据与 body 重排共用。
@@ -242,79 +198,14 @@ class _MechanicalLayer:
             out.append(t)
         return out
 
-    def _corpus_top_term_hit_files(self, terms, pid=None):
-        """语料包含性（治本·判别核）：返回查询**干净且稀有实体**出现在的作用域
-        正文 filepath 列表（空=语料真缺该实体 → 拒答）。
-
-        先 _clean_entities 剥离问句壳与跨域通用词，再排除全局高频词（出现在过半
-        文件的词，如项目名 AIMH），只认稀有特异词作判别——命中文件才精准，不会
-        退化成全库。任一稀有实体命中正文 → 返回命中文件（领域内事实，低置信返回）；
-        全不命中 → 空列表（语料真缺该实体 → 拒答）。
-        """
-        cl = self._clean_entities(terms)
-        if not cl:
-            return []
-        rare = self._rare_entities(terms, pid)
-        crit = rare if rare else cl   # 纯项目名问题（无稀有实体）退化回全 clean
-        # 候选预筛：search_blob 列 SQL 子串圈出可能命中的文件（O(候选) 而非全库
-        # 逐文件读盘）。blob 只含 FM 层文本（检索层无正文）：blob 零命中时预筛
-        # 降级全量文件列表（见 _corpus_blob_candidates），最终 _boundary_hit 在
-        # 真正文上精确判定——正文按需打捞，精度不降。
-        cands = self._corpus_blob_candidates(crit, pid)
-        hits = []
-        for fp in cands:
-            b = self.read_body(fp)
-            if not b:
-                continue
-            bl = b.lower()
-            if any(self._boundary_hit(t, bl) for t in crit):
-                hits.append(fp)
-        return hits
-
-    def _corpus_blob_candidates(self, crit, pid=None):
-        """用 search_blob 列 SQL 子串圈候选文件（O(命中) 而非全库逐文件读盘）。
-
-        仅当 _blob_ok【且】已全行填充（_blob_populated）时启用；否则退回
-        _corpus_files 全量列表（旧库未 rebuild 兼容：列缺或全 NULL 时 LIKE 会漏
-        NULL 行→假拒答，故降级 body 扫描）。下游 _boundary_hit 负责精确判定。
-
-        blob 只含 FM 层文本（检索层无正文——设计铁律）：crit 词若只落在正文，
-        LIKE 圈不出其所在文件 → 本函数返回空时【不可当作语料真缺】——调用方
-        _corpus_top_term_hit_files 的最终判定域是 body（read_body + _boundary_hit），
-        故空候选降级 _corpus_files 全量列表，正文词的命中判定交由 _boundary_hit
-        在真正文上完成（打捞口径，与 _entity_in_corpus / _rare_entities 同源）。
-        """
-        # 仅当列已存在【且】已全行填充才走 SQL 快速路径；旧库未 rebuild 时
-        # search_blob 全 NULL，LIKE 会静默漏 NULL 行→假拒答，故降级 body 扫描。
-        if not (getattr(self, "_blob_ok", False) and self._blob_populated()):
-            return self._corpus_files(pid)
-        c = self._conn()
-        parts, params = [], []
-        for t in crit:
-            if t:
-                parts.append("search_blob LIKE ?")
-                params.append("%" + str(t).lower() + "%")
-        if not parts:
-            return self._corpus_files(pid)
-        sql = "SELECT filepath FROM events WHERE (" + " OR ".join(parts) + ")"
-        if pid:
-            sql += " AND (package_id=? OR package_id LIKE ? || '/%')"
-            params += [pid, pid]
-        rows = [r[0] for r in c.execute(sql, params).fetchall()]
-        # blob（FM 层）零命中：词可能只在正文 → 降级全量文件列表，交给下游
-        # _boundary_hit 在真正文上判定（正文按需打捞，检索层不预存正文）。
-        return rows if rows else self._corpus_files(pid)
-
     def _entity_in_corpus(self, term, pid=None):
         """判别实体是否真在语料（正文 OR 锚点文本任一出现即算有）。
 
-        供拒答层『稀有实体全缺失 → 硬拒答』做存在性判定。此处用【子串】而非
-        _boundary_hit：拒答路径的误伤是「过拒」(false-present→不拒→把真答案
+        供拒答层『稀有实体全缺失 → 硬拒答』做存在性判定。此处用【子串】匹配：
+        拒答路径的误伤是「过拒」(false-present→不拒→把真答案
         当域外丢掉)，故偏宽松；而 rare 过滤已剔除高频 2 字碎片(计算/公司/世界…)，
         残留稀有实体子串命中基本就是同一实体，碰撞误删风险可忽略。比仅扫正文更稳：
         实体仅落在锚点(title/about/keywords)也识别得到，不会被误拒。
-        （对照 _corpus_top_term_hit_files 用 _boundary_hit 是另一条路：它的误伤是
-        「漏拒」，故偏严——两条路径误差方向本就相反，匹配口径应相反。）
 
         两段式（检索层无正文，正文按需打捞——设计铁律）：
           1. search_blob 列 SQL 子串判定（O(候选)，实测 9000 文件≈8ms）。blob 只含
@@ -445,7 +336,7 @@ class _MechanicalLayer:
         # 才稳：复合词(≥3字)子串匹配可靠，不依赖脆弱的二元稀有过滤。
         if entity_gate:
             # AI 已解析出规范复合词，直接用【原始 keywords】做存在性判定，不再过
-            # _clean_entities 机械清洗——否则 比特币(含"币")/股价(含"价") 会被
+            # 机械清洗——否则 比特币(含"币")/股价(含"价") 会被
             # 功能字剥掉而误判缺失→漏拒。AI 关键词可信，逐个查语料子串；
             # 全缺失 → 域内确无该实体 → 硬拒答。（≥2 字才计入，过滤单字噪声）
             ents = [t for t in terms if t and len(str(t).strip()) >= 2]
@@ -1186,7 +1077,7 @@ class RetrievalMixin:
             # 引擎零-ML——实体抽取/消歧由 AI 负责，引擎只做确定性检索与拒答；
             # 机械切分(normalize_terms) 仅在没有 AI 接线时的兜底，不靠它硬顶。
             # 归一小写：下游 _anchor_score / _apply_field_weights / _coverage /
-            # _corpus_top_term_hit_files 全按小写匹配（锚点文本与四要素字段已
+            # 检索侧匹配全按小写（锚点文本与四要素字段已
             # .lower()），AI 传入原大小写关键词会致子串匹配全失（如 "CEMA"
             # 命中不了小写 "cema" → 0 召回），故此处统一归一。
             terms = [str(k).lower() for k in keywords]

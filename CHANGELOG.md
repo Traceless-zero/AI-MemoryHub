@@ -6,6 +6,14 @@
 
 ## 2026-09-08
 
+### 全库审查第一批修复：未使用 import + 墓碑注释 + skill 双副本同步
+
+- **#3 未使用 import**：`hma_core` 删 `import math` / `from collections import Counter` / `timedelta` / `from .core import fm_yaml` 四项——S4b 搬迁残留（检索侧已随迁），`grep -c` 确认各仅 import 行出现 1 次。
+- **#5 墓碑注释清理**：`retrieval.py` 孤立注释块"变更快照系统已废弃（R59 续3）"整块删除（updated 字段刷新行为属显然契约）；`write_path.py` `trigger` docstring 去掉"历史曾用于…已废弃"句，保留现状描述"当前不落任何变更日志"。
+- **#4 skill 双副本同步**：`aimh-recall` / `aimh-always` 项目级→用户级限定范围同步（未跑全量 `sync_skills pull`——它会用项目级 code-review 留档的**未修复版 dump_comments.py** 覆盖用户级修复版；已 diff 验证两目录一致）。
+- **验收**：compileall OK + import 冒烟 OK；全量 **25/25 GREEN**；双副本 diff 一致。
+- 来源：全库卫生审查问题清单 #3/#4/#5（第一批）；#2（孤儿 71 行）与 #1（exe 重打包）待后续批次。
+
 ### time_iso 边界语义接通全链路：`X之前/X以来` 可达硬过滤与软加权（新护栏 11/11）
 
 - **缺口（实测钉死）**：`parse_text` 扫描正则不含边界词 → "大前天之前"被窄化成"大前天"单日（硬过滤 1 包）、"去年以来"被窄化成"去年"一整年（**命中 0 包**，2026 年事件全被排除——语义错误而非无数据）。根因：`parse()` 单表达式支持 `before/after`（via `_BOUNDARY_RE`），但扫描模式正则没带；且 `TimeHint` 模型没有承载方向性开区间的字段。

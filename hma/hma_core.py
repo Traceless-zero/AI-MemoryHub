@@ -19,16 +19,13 @@ import re
 import json
 import shutil
 import sqlite3
-import math
-from collections import Counter
-from datetime import date, timedelta
+from datetime import date
 
 # 公共路由层（查询→包/作用域）：从 hma_core 抽出为单一真相源。
 # routing 模块惰性导入本模块的符号，故此处顶层导入无循环依赖风险。
 from . import routing
 from . import scoring_coeffs as C
 from . import recall_obscure as ro
-from .core import fm_yaml
 from .core.event_package import (  # noqa: F401  S2 拆分 re-export：EventPackage 本体与四要素兼容层
     EventPackage, _as_four, _merge_legacy, _four_to_list,
 )

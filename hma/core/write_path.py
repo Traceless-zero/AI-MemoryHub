@@ -96,8 +96,7 @@ class WriteMixin:
         anchors: 可选子事件锚点列表 [{Chapter, about, keywords}]（C+A 对象锚点，
         V2 形态，无 tags/locator），挂在同一个 .md 正文上，实现「1 个包 + 多锚点」
         的细粒度召回。
-        trigger: 调用方标识（仅作元信息标签，当前不落任何变更日志；
-                 历史曾用于 changes/ 快照审计，R59 续3 已废弃）。
+        trigger: 调用方标识（仅作元信息标签，当前不落任何变更日志）。
         V2 注意：aliases / features 入参会被折叠进四要素 dict（person/location/topic），
         不再有独立存储列；时间用 pkage_created/pkage_updated（兼容旧 created/updated）。
         """

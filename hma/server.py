@@ -299,7 +299,11 @@ TOOLS = [
             "type": "object",
             "properties": {
                 "time_hint": {"type": "string",
-                              "description": "自然语言时间意图，如 '2026年3月' / '三月' / '2026年' / '90 days ago'"},
+                              "description": "自然语言时间意图。中文固定时间词直接传原词即可，"
+                                             "由引擎确定性换算日期，AI 无需自行计算："
+                                             "'上个月' / '前天' / '3月份' / '上周三' / '最近三天' / "
+                                             "'大前天之前' / '去年以来' 等；也支持 ISO（'2026-03-05'、'2026年3月'）"
+                                             "与英文（'March 2024'、'90 days ago'）"},
                 "scope": {"type": "string",
                           "description": "聚焦子树：memory 根下的完整相对路径（如 '其他/对话记录归档'）；留空=全仓"},
                 "top_k": {"type": "integer",

@@ -36,7 +36,7 @@ anchors:
     about: "项目结构与当前状态：仓库根 memory/+hma/+scripts/core/+一键更新记忆索引.exe；基准 LoCoMo 1540 题 recall@30≈99.5%、hit@5 89.7–92%，拒答层已随 V1.0 落地，零依赖原型。"
     keywords: ["确定性脚本", "LoCoMo", "recall@30", "基准", "当前状态"]
 pkage_created: 2026-07-26
-pkage_updated: 2026-08-29
+pkage_updated: 2026-09-09
 ---
 
 # 什么是 AIMH 系统
@@ -102,7 +102,7 @@ CEMA（Cognitive Event-driven Memory Architecture，认知-事件驱动记忆架
 - **L2（章级）`query_anchors`**：在命中包的 anchors 上做关键词匹配，定位到具体章（扁平 BM25，无独立选章子系统）。
 - **L3（正文级）`memory_read_section`**：取某章正文，交给 READ/REFINE 做最终验证与重排。
 
-F+C+A+READ 三段式：F-stage 子串变体归一如"回旋镖"⊂"回旋镖计划"缩圈；C+A 消歧；READ 取 topK 正文。REFINE 常识桥接（如"最值钱→宝石"）为设计稿未接引擎；包级 rerank 装置默认关，当前生效的是确定性裁切与字段加权。
+F+C+A+READ 三段式：F-stage 子串变体归一如"回旋镖"⊂"回旋镖计划"缩圈；C+A 消歧；READ 取 topK 正文。REFINE 语义桥接（如"最值钱→宝石"）归 AI 理解层，引擎侧仅保留机械兜底拒答闸（corpus_overlap_absent）；包级 rerank 装置默认关，当前生效的是确定性裁切与字段加权。
 
 ## 七、裁切与字段加权
 

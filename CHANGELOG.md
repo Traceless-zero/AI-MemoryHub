@@ -6,6 +6,20 @@
 
 ## 2026-09-08
 
+### 全库审查第三批：#6 权威包 REFINE 措辞精度 + #7 engine 派发入口澄清
+
+- **#6 权威包对账（2 处措辞精度）**：`SCHEMA.md` / `什么是AIMH系统.md` 的"REFINE/LLM 常识桥接未接入引擎"易被误读为 refine 模块整体未接——实际 refine.py 的**机械兜底拒答闸**（`corpus_overlap_absent`）已接入引擎两处消费（机械兜底路径 + MCP 主路径 ABSTAIN），语义桥接归 AI 理解层。两句改写为"REFINE 语义桥接归 AI 理解层，引擎侧仅保留机械兜底拒答闸"。走 export/import 流程 + rebuild。
+- **#7 派发入口澄清**：`engine/dispatch.py:21` import 的 `registry.dispatch` 全仓零调用（CLI `_cmd_*` 直调 Memory、server.py 自持 HANDLERS 表）——import 收窄为 `available_modes`；`registry.dispatch` 作为注册机制配套 API 在 `audit_orphans` RETAINED 表登记（声明保留=5）。`from . import handlers` 是 side-effect 自注册，保留。
+- **行尾教训第四次**：`git show HEAD:file | grep -c $'\r'` 判行尾不可靠（Git Bash 管道假象）——**必须字节级**（subprocess + bytes.count）。各文件原行尾实测：dispatch.py=LF、SCHEMA/什么是AIMH= CRLF、audit_orphans= CRLF，已逐一按原样恢复，真实 diff **7+/5-**。
+- **验收**：compileall OK；`python -m hma.engine modes` 冒烟 OK（note/oc_dossier/packs 注册正常）；全量 **25/25 GREEN**；audit_orphans 孤儿候选 **1**（_boundary_hit/_is_cjk 已删，_rare_entities/dispatch 转声明保留=5）。
+
+### 全库审查第二批：corpus_hit_rerank 连锁闭包清理 + _rare_entities 声明保留
+
+- **ast 闭包计算**：删 `_corpus_top_term_hit_files` / `_corpus_blob_candidates` / `_boundary_hit` / `_is_cjk` / `_clean_entities` / `_flat_variants_late` 六项零生产调用链，净 -203 行（retrieval 1948→1835）；`_entity_in_corpus` / `_entity_vocab` / `_blob_populated` / `_blob_ok` 有活调用者保留。
+- **`_rare_entities` 反转保留**：删除后 `regress_daylog_append` E 段当场红（AttributeError）——它有测试钉（blob+body 两段打捞行为）！从 git 历史恢复 + 在 `audit_orphans` RETAINED 表登记（理由+裁决日期），孤儿候选 2→1。
+- **教训两条**：①删除闭包必须跨类/跨文件计算（护栏在 devkit repo 外扫不到；`_entity_vocab` 有 hma_core:640 活调用，差集粗扫曾误判）；②行尾坑第三次（io universal newline），逐文件按原行尾恢复。
+- **验收**：全量 **25/25 GREEN**；daylog_append / bench_veronica / abstain 复验全绿。
+
 ### 一键更新记忆索引.exe 重打包（PyInstaller 6.21，同 8/29 方法）
 
 - **背景**：exe 内嵌引擎停在 8/29 v1.0（无 core/ 五模块）——不含 FM fail-closed、P2-D 越界防护、裸月份、边界语义。全库审查 #1（P1）。

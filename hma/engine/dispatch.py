@@ -18,7 +18,7 @@ import sys
 import argparse
 
 from . import handlers  # noqa: F401  触发 handler 自注册
-from .registry import dispatch, available_modes
+from .registry import available_modes
 from ..hma_core import Memory
 from ..hma_core import derive_anchors
 

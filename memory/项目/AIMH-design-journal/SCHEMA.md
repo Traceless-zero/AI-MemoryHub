@@ -72,7 +72,7 @@ anchors:
     about: "§6 指向推导/哲学/实现类细则文档索引（存储架构总览、召回消歧管线、数学与语言哲学思路、什么是AIMH系统等），本文件只写落库与 lint 契约，细则见各文档。"
     keywords: ["细则索引", "推导", "哲学", "实现", "存储架构总览", "召回消歧"]
 pkage_created: 2026-08-14
-pkage_updated: 2026-09-02
+pkage_updated: 2026-09-09
 ---
 
 # AIMH 设计规范（落库与校验唯一真相源）
@@ -210,7 +210,7 @@ pkage_updated: 2026-09-02
 - **锚点三字段**：`Chapter` 兼正文定位键；`about` 概述短答（可直答概述类问题，但**必须特征化、严禁泛化**——见 §2.7 `about` 铁律，泛化 about 致同包 BM25 稀释挤掉目标锚点）；`keywords` 章级定位词（**必写覆盖五维：时间/地点/关键事件/锚定物品/人物，缺维＝漏召回**，由 `hma/fm_schema.py` 的 `check_kw5` 写前硬过滤 + `lint_memory.py` 兜底校验）。详见 `AIMH核心规格（极简·当前实现）.md` §3。
 - **三层检索**：`query()`（包级 BM25）→ `query_anchors()`（锚点级 BM25）→ `read_section()`（取正文段）。概述类问题优先读 `summary` / `about`；包/实体级歧义由 `resolve_query`（歧义门 + 特征判别澄清 + 负特征差集，确定性、零 LLM）处理。
 - **字段权重**（读时软加权，永不剔除候选）：`person4 > time3 > loc2 > topic1`。
-- **裁切与 rerank**：`waterfall_cut`（锚点级 dK 分差 >75 单向裁切）收束候选；包级 BM25 rerank 装置保留但默认关（`rerank=False`），重开前必须先改成锚点级。「自以为是层」（rule#1 / OR-fail-safe 保 gold 逻辑）已全删，绝不重写回 core。REFINE/LLM 常识桥接与 embedding 后备**未接入引擎**（零 ML、零向量），不依赖。
+- **裁切与 rerank**：`waterfall_cut`（锚点级 dK 分差 >75 单向裁切）收束候选；包级 BM25 rerank 装置保留但默认关（`rerank=False`），重开前必须先改成锚点级。「自以为是层」（rule#1 / OR-fail-safe 保 gold 逻辑）已全删，绝不重写回 core。REFINE 的**语义桥接**（LLM/词典形态）与 embedding 后备**未接入引擎**——语义桥接归AI 理解层，引擎侧仅保留 refine 的机械兜底拒答闸 `corpus_overlap_absent`（零 ML、零向量），不依赖。
 - 检索接口细则见 `AIMH核心规格（极简·当前实现）.md`；实体歧义门设计见 `召回消歧管线设计（实现）.md` / `召回消歧的数学与语言哲学思路.md`；存储/命名空间见 `存储架构总览.md`。
 
 ### 3.1 四要素适配器（写时映射 / 读时加权 / 跨包查询）

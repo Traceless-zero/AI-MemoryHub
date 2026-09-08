@@ -28,24 +28,24 @@ from datetime import date, timedelta
 from . import routing
 from . import scoring_coeffs as C
 from . import recall_obscure as ro
-from . import fm_yaml
-from .event_package import (  # noqa: F401  S2 拆分 re-export：EventPackage 本体与四要素兼容层
+from .core import fm_yaml
+from .core.event_package import (  # noqa: F401  S2 拆分 re-export：EventPackage 本体与四要素兼容层
     EventPackage, _as_four, _merge_legacy, _four_to_list,
 )
-from .aggregate_time import (  # noqa: F401  S3 拆分 re-export：时间意图与聚合/硬过滤后端
+from .core.aggregate_time import (  # noqa: F401  S3 拆分 re-export：时间意图与聚合/硬过滤后端
     TimeHint, parse_time_hint, db_aggregate, time_filter,
     _is_union_query, _time_tiebreak,
 )
-from .write_path import (  # noqa: F401  S5 拆分 re-export：写入线 Mixin 与路径护栏
+from .core.write_path import (  # noqa: F401  S5 拆分 re-export：写入线 Mixin 与路径护栏
     WriteMixin, _in_tree, _safe_md_path,
 )
-from .retrieval import (  # noqa: F401  S4a 拆分 re-export：机械层与拒答阈值
+from .core.retrieval import (  # noqa: F401  S4a 拆分 re-export：机械层与拒答阈值
     _MechanicalLayer, ABSTAIN_KAPPA, ABSTAIN_HIGH_K, ABSTAIN_DEFAULT_MSG,
 )
-from .retrieval import RetrievalMixin  # noqa: F401  S4b 拆分 re-export
-from .retrieval import _PUNCT, _STOPWORDS, _GARBAGE_FUNC, MIN_CANDIDATES  # noqa: F401
-from .retrieval import _LOC_WORDS, _FIELD_W, _FIELD_NUDGE, _FIELD_CAP  # noqa: F401
-from .retrieval import (  # noqa: F401  S4b 跨线共享函数（本模块经 re-export 继续使用）
+from .core.retrieval import RetrievalMixin  # noqa: F401  S4b 拆分 re-export
+from .core.retrieval import _PUNCT, _STOPWORDS, _GARBAGE_FUNC, MIN_CANDIDATES  # noqa: F401
+from .core.retrieval import _LOC_WORDS, _FIELD_W, _FIELD_NUDGE, _FIELD_CAP  # noqa: F401
+from .core.retrieval import (  # noqa: F401  S4b 跨线共享函数（本模块经 re-export 继续使用）
     _scope_clause, normalize_terms, _flat_variants, _is_garbage_bigram,
     _anchor_score, _feat_alt_match, _field_term_hit, _norm, _norm_name,
     _share_surname, _search_blob, _entity_key,

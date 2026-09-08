@@ -6,6 +6,20 @@
 
 ## 2026-09-08
 
+### 拆出模块归类：5 个新模块收进 `hma/core/` 子包
+
+- **内容**：`fm_yaml` / `event_package` / `aggregate_time` / `write_path` / `retrieval` 五个 S1–S5 拆出模块，用 `git mv` 收进 `hma/core/`（保留文件历史），新建 `hma/core/__init__.py` 声明"内部子包，外部不应直接 import"。`hma/` 根目录从 24 个文件降到 19 个，五线模块各归其位。
+- **同步改写**：子包内指向包根的相对 import 改上一级（`from . import hma_core` → `from .. import hma_core` 等，共 15 处）；`hma_core` 的 re-export 全部改 `from .core.X import ...`。
+- **验收**：import 冒烟 OK（MRO 不变）+ 全量 **24/24 GREEN** + 对抗 5/5 + abstain 4/4 + 快照 **70/70 零差异**。
+
+### S4b 拆分第六步（检索线 · 方法）：13 个检索方法 → `RetrievalMixin`（方案 A）
+
+- **内容**：`query` / `_build_clarify` / `_coverage_gate` / `resolve_query` / `_idf` / `_bm25_corpus` / `_rerank` / `query_anchors` / `_apply_field_weights` / `query_features` / `recall_multihop` / `_score` / `resolve_two_layer` 共 1215 行，用 ast 精确摘取后搬入 `RetrievalMixin`（方法体逐字保留）。MRO：`Memory → _MechanicalLayer → WriteMixin → RetrievalMixin`。
+- **跨线共享名随语义搬入**：12 个函数（`normalize_terms` / `_scope_clause` / `_search_blob` / `_entity_key` / `_anchor_score` 等）+ 8 个常量（`_PUNCT` / `_STOPWORDS` / `_GARBAGE_FUNC` / `MIN_CANDIDATES` / `_LOC_WORDS` / `_FIELD_W` / `_FIELD_NUDGE` / `_FIELD_CAP`），hma_core 全部 re-export。
+- **方案试错（记档）**：先试 PEP 562 模块级 `__getattr__` 白名单惰性解析（想省掉 20 个包装），**失败**——它只对 `module.x` 属性访问生效，不参与函数内全局名查找，方法体里的裸名字照样 NameError。改回 S1/S3 的成熟模式（随语义搬 + re-export）。
+- **两个搬迁陷阱（新教训）**：`ast.FunctionDef.lineno` **不含装饰器行** → 删 `_score` 时残留 `@staticmethod` 被下一个方法 `read` 继承，把实例方法变成静态方法（`self.read(id)` 报 missing 1 argument）；同时 retrieval 里的 `_score` 丢了 `@staticmethod` 退化成实例方法（`ql` 收到 self）。**摘方法必须取 `min(decorator_list.lineno + lineno)`**。
+- **验收（与 S4 开工基线逐项对齐）**：`bench_veronica_20_5` **可答 20/20 + 对抗 5/5**、`regress_abstain` **4/4**——拒答闸未退化；解析快照 **70/70 零差异**；全量 **24/24 GREEN**。**hma_core 2735 → 1316 行**（较拆分前 4567 行 **-71%**）。
+
 ### S4a 拆分第五步（检索线 · 机械层）：`_MechanicalLayer` 抽至 `hma/retrieval.py`（hma_core 3191 → 2735 行）
 
 - **内容**：`_MechanicalLayer` 全类（444 行，11 方法：候选生成 / 重排过滤 / 实体词表 / **拒答四道闸**）+ 拒答层三常量（`ABSTAIN_KAPPA` / `ABSTAIN_HIGH_K` / `ABSTAIN_DEFAULT_MSG`）收编为 `retrieval.py`（483 行）。`Memory` 的 MRO 变为 `Memory → _MechanicalLayer → WriteMixin → object`（继承链不变，方法体逐字保留）。

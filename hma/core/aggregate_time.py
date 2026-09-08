@@ -254,7 +254,7 @@ def parse_time_hint(text, now=None):
     # 命中 → days/windows 注入（与英文级联叠加）；未命中 → 落回既有级联（零回归）。
     # fail-open：预解析任何异常不阻断检索。
     try:
-        from .time_iso import parse_text as _ti_parse
+        from ..time_iso import parse_text as _ti_parse
         for _r in _ti_parse(t, today=now):
             _y1, _m1, _d1 = (int(x) for x in _r["start"].split("-"))
             days.add(date(_y1, _m1, _d1))
@@ -317,7 +317,7 @@ def _time_tiebreak(edate, updated):
 def _scope_clause_late(scope, root):
     """运行时解析 hma_core._scope_clause（S3 拆分后其仍居 hma_core——检索侧三处共用；
     延迟解析避免循环 import）。"""
-    from . import hma_core
+    from .. import hma_core
     return hma_core._scope_clause(scope, root)
 
 

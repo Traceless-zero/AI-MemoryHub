@@ -13,7 +13,7 @@ import os
 from datetime import date
 
 from . import fm_yaml
-from . import scoring_coeffs as C
+from .. import scoring_coeffs as C
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +95,7 @@ def _four_to_list(val):
 def _derive_anchors_late(md_text, max_level=6):
     """运行时解析 hma_core.derive_anchors（S2 拆分后锚点派生仍居 hma_core 尾部，
     模块 import 期尚不存在，故延迟到调用期解析，避免循环 import）。"""
-    from . import hma_core
+    from .. import hma_core
     return hma_core.derive_anchors(md_text, max_level)
 
 

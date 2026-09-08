@@ -20,21 +20,21 @@ import os
 import re
 from collections import Counter
 
-from . import recall_obscure as ro
-from . import routing
-from . import scoring_coeffs as C
+from .. import recall_obscure as ro
+from .. import routing
+from .. import scoring_coeffs as C
 from .aggregate_time import (  # S3 已外拆的时间意图/闸，无循环依赖
     TimeHint, parse_time_hint, _is_union_query, _time_tiebreak,
 )
 
 
 def _flat_variants_late(fld):
-    from . import hma_core
+    from .. import hma_core
     return hma_core._flat_variants(fld)
 
 
 def _is_garbage_bigram_late(t):
-    from . import hma_core
+    from .. import hma_core
     return hma_core._is_garbage_bigram(t)
 
 
@@ -461,7 +461,7 @@ class _MechanicalLayer:
         # 复合实体域外题（量子计算，含子词"计算"在语料）机械不可达，仍由 AI 接口兜。
         if not entity_gate:
             try:
-                from .refine import corpus_overlap_absent
+                from ..refine import corpus_overlap_absent
                 if corpus_overlap_absent(self, q):
                     return {"answer": [], "abstain": True,
                             "reason": "corpus_missing_entity_mech",
@@ -930,7 +930,7 @@ class RetrievalMixin:
         # 查询只回空结果、MCP 显示 (no match) 而非显式 (ABSTAIN)，等于拒答层没接）。
         elif allow_abstain and not results:
             try:
-                from .refine import corpus_overlap_absent
+                from ..refine import corpus_overlap_absent
                 if corpus_overlap_absent(self, q):
                     return {"decision": "abstain",
                             "reason": "corpus_missing_entity_mech", "results": []}

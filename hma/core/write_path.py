@@ -62,22 +62,22 @@ def _safe_md_path(events_dir, id):
 
 
 def _entity_key_late(title):
-    from . import hma_core
+    from .. import hma_core
     return hma_core._entity_key(title)
 
 
 def _search_blob_late(pkg):
-    from . import hma_core
+    from .. import hma_core
     return hma_core._search_blob(pkg)
 
 
 def _derive_anchors_late(md_text, max_level=6):
-    from . import hma_core
+    from .. import hma_core
     return hma_core.derive_anchors(md_text, max_level)
 
 
 def _memory_cls_late():
-    from . import hma_core
+    from .. import hma_core
     return hma_core.Memory
 
 

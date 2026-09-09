@@ -115,9 +115,8 @@ class _MechanicalLayer:
     def _rare_entities(self, terms, pid=None):
         """（恢复·声明保留）筛出查询中「稀有特异实体」：出现于 <50% 作用域文件的词。
 
-        生产当前无直接消费者（corpus_hit_rerank 重排 2026-09-05 废除）；保留原因：
-        regress_daylog_append.py E 段钉住其 blob+body 两段打捞行为（正文高频词
-        不被 blob 计 0 误判稀有），供 Gate1 语料包含性未来扩展复用。
+        保留原因：regress_daylog_append.py E 段钉住其 blob+body 两段打捞行为
+        （正文高频词不被 blob 计 0 误判稀有），供 Gate1 语料包含性扩展复用。
         """
         """从 clean entities 中筛出「稀有特异实体」：出现在作用域文件比例 < 50%
         的词（如 四要素/CEMA/学历/泥沼）。排除全局高频词（AIMH 几乎每文件都提，
@@ -1059,8 +1058,8 @@ class RetrievalMixin:
         rerank=False（2026-08-27 起默认关）→ 若显式开启，在已捞到的候选上做一层
         确定性 BM25 重排（无向量、可由正文重建）。⚠️ 当前实现是【包级】BM25
         （按整文件建 token 桶，同包所有锚点共享同一分），非锚点级，对同包多锚点
-        无法按锚点正文重排；且 2026-08-27 已移除原 OR-fail-safe / rule#1 两层
-        「自以为是」保护层（用户判定冗余且引入 bug）。重开 rerank 前须先改锚点级。
+        无法按锚点正文重排。禁止再叠加保护/排序层（dK 裁切自带保 gold 语义，
+        多层冗余且冲突）。重开 rerank 前须先改成锚点级。
 
         use_field_weights=True（V1.x 起默认开）→ 在以上排序之后，再叠加一层理解层
         四要素软加权（person/time/location/topic 一等字段族 + 包级 tags；详见

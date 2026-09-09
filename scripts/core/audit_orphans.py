@@ -38,7 +38,7 @@ RETAINED = {
     "dispatch":
         "engine 通用派发入口（registry 注册机制的配套 API）：CLI _cmd_* 与 server.HANDLERS 各自持表分发，函数体暂无调用方（2026-09-09 裁决）",
     "_rare_entities":
-        "稀有实体筛选（blob+body 两段打捞）：corpus_hit_rerank 废除后生产暂无消费者，"
+        "稀有实体筛选（blob+body 两段打捞）：生产暂无消费者，"
         "regress_daylog_append E 段钉住打捞行为，供 Gate1 语料包含性未来扩展复用（2026-09-09 裁决）",
 }
 

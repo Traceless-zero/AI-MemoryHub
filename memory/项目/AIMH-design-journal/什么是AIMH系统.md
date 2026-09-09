@@ -36,7 +36,7 @@ anchors:
     about: "项目结构与当前状态：仓库根 memory/+hma/+scripts/core/+一键更新记忆索引.exe；基准 LoCoMo 1540 题 recall@30≈99.5%、hit@5 89.7–92%，拒答层已随 V1.0 落地，零依赖原型。"
     keywords: ["确定性脚本", "LoCoMo", "recall@30", "基准", "当前状态"]
 pkage_created: 2026-07-26
-pkage_updated: 2026-09-09
+pkage_updated: 2026-09-10
 ---
 
 # 什么是 AIMH 系统
@@ -108,7 +108,7 @@ F+C+A+READ 三段式：F-stage 子串变体归一如"回旋镖"⊂"回旋镖计�
 
 - **字段加权**：读取时按四要素命中数调序（`person4>time3>loc2>topic1`），命中要素越多越靠前、永不清退。
 - **dK 分差裁切**：`waterfall_cut` 锚点级相邻分差 >75 单向裁切收束候选，不误杀（50 vs 75 对比已跑，维持 75）。
-- **rerank 装置**：包级 BM25 rerank 保留但默认关（`rerank=False`），重开前必须先改成锚点级；「自以为是层」（rule#1 / OR-fail-safe 保 gold 逻辑）已全删，绝不重写回 core。
+- **rerank 装置**：包级 BM25 rerank 保留但默认关（`rerank=False`），重开前必须先改成锚点级；**禁止叠加 OR-fail-safe / rule#1 类「保 gold」保护层**——dK 裁切自带保 gold 语义，多层冗余且冲突。
 - 目标：把 gold 压入 top-5，对齐 TrueMemory 93% 基线。
 
 ## 八、拒答层（已落地 · V1.0）

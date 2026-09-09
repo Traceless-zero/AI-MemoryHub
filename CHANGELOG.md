@@ -20,6 +20,14 @@
 - **登记同步**：工具总览删 build_user_package 表格行；exe 锚点与正文去掉"目录结构树"描述（tree 停用后 exe 只重建索引）；`aimh-intake` 类型 B 分支简化为统一走 `aimh-ingest`。
 - **验收**：全量 **25/25 GREEN**，全仓 py 59 → **56 个**。
 
+### 墓碑注释全库清零（代码/脚本/技能 + 三权威包红线表述正向化）
+
+- **代码/脚本/技能 5 处**：`_rare_entities` docstring 的"corpus_hit_rerank 重排 2026-09-05 废除"（前日自写墓碑）、`retrieval.py` rerank 段"2026-08-27 已移除原 OR-fail-safe / rule#1 两层"、`audit_orphans` RETAINED 理由、`rebuild_index`"派生缓存已停用"、recall hook"废除"——全部改写为当前状态的正向描述。
+- **三权威包红线表述正向化**（export/import + rebuild）：SCHEMA / 什么是AIMH系统 / 领域检索后处理规范 的「自以为是层」…已全删，绝不重写回 core → **禁止叠加 OR-fail-safe / rule#1 类「保 gold」保护层**——dK 裁切自带保 gold 语义，多层冗余且冲突。语义强度保留，历史叙述去除。
+- **「自以为是层」出典澄清**：= OR-fail-safe / rule#1 保 gold 逻辑（怕 gold 被裁就 OR 兜底塞回）；dK 瀑布裁切自带保 gold 语义（同分簇/弱命中不裁），叠层=冗余+冲突——工程红线圈①，08-27 删，08-29 曾在 SCHEMA/什么是AIMH/外部对照发现发霉残留并改写。
+- **保留的假墓碑**："废除次数加分"（算法术语）、`llm_adapter`/`server.py`/`packs_template` 的"不写已废弃元备注"（规则声明本身）、`oc_registry`"否则"（误报）。
+- **验收**：全量 **25/25 GREEN**（权威包正文改动后跑，无 BM25 漂移）；代码/脚本/技能 墓碑复扫清零。
+
 ### 客户端记忆迁移能力退役（migrate_*_memory 四适配器 + 全部契约登记）
 
 - **删 4 脚本**：migrate_claude / codex / gemini / wb_memory（451 行）。**用 os.remove + git add -A，不用 `git rm hma/tree.py` 类命令**（该命令在此环境两次触发 hma/ 目录级消失，实锤）。

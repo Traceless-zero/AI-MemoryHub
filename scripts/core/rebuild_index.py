@@ -9,7 +9,7 @@
 确定性全量重建（零 AI、零 token）：
   1) 扫 memory/ 下所有事件 .md 的 front-matter → 重建 index.db
      （复用 hma.hma_core.Memory.rebuild_all，progress 回调逐包回报）
-  注：不再生成 memory/目录结构树.md（该派生缓存已停用，避免污染仓库）。
+  注：不生成目录结构树（属派生缓存，避免污染仓库）。
 
 自动化场景（管道 / 定时 / CI）：设 HMA_NO_GUI=1 或带 --no-gui，
 退回纯 stdout 输出，不 sleep 不等键，退出码反映成功/失败。

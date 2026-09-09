@@ -13,6 +13,13 @@
 - **行尾教训第四次**：`git show HEAD:file | grep -c $'\r'` 判行尾不可靠（Git Bash 管道假象）——**必须字节级**（subprocess + bytes.count）。各文件原行尾实测：dispatch.py=LF、SCHEMA/什么是AIMH= CRLF、audit_orphans= CRLF，已逐一按原样恢复，真实 diff **7+/5-**。
 - **验收**：compileall OK；`python -m hma.engine modes` 冒烟 OK（note/oc_dossier/packs 注册正常）；全量 **25/25 GREEN**；audit_orphans 孤儿候选 **1**（_boundary_hit/_is_cjk 已删，_rare_entities/dispatch 转声明保留=5）。
 
+### 全库瘦身收尾：删 tree.py，两个低频脚本移入脚手架
+
+- **删 `hma/tree.py`**（32 行，目录树生成已停用）连带 `dispatch.py` 的 `_cmd_tree` 函数、tree 子命令注册、docstring 行；`python -m hma.engine modes` 冒烟正常。
+- **移入 `AIMH-devkit/retired/`**（有用但不在生产链）：`build_user_package.py`（153 行，User/profile 包初始化填充）、`agent_loop_demo.py`（330 行，最小 agent loop 演示）。判据沿用"删掉它 AIMH 还能不能用"——不能删但也不必挂在生产目录，故落脚手架留底。
+- **登记同步**：工具总览删 build_user_package 表格行；exe 锚点与正文去掉"目录结构树"描述（tree 停用后 exe 只重建索引）；`aimh-intake` 类型 B 分支简化为统一走 `aimh-ingest`。
+- **验收**：全量 **25/25 GREEN**，全仓 py 59 → **56 个**。
+
 ### 客户端记忆迁移能力退役（migrate_*_memory 四适配器 + 全部契约登记）
 
 - **删 4 脚本**：migrate_claude / codex / gemini / wb_memory（451 行）。**用 os.remove + git add -A，不用 `git rm hma/tree.py` 类命令**（该命令在此环境两次触发 hma/ 目录级消失，实锤）。

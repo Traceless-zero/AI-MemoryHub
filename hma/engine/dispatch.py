@@ -6,8 +6,7 @@
     python -m hma.engine query <root> <q>      # 确定性检索（关联发现用）
     python -m hma.engine query_anchors <root> <q>  # L2 章级检索
     python -m hma.engine install/uninstall <pkg>   # 装卸记忆包索引
-    python -m hma.engine rebuild-all <root>    # 全量重建索引 + 目录树
-    python -m hma.engine tree <root>           # 生成目录结构树（已停用）
+    python -m hma.engine rebuild-all <root>    # 全量重建索引
 
 记忆直接落 `memory/`（单一权威存储），不再经 sources/ 中间格式。
 daylog 由 scripts/core/daylog_append.py 机械追加（单 daylog 路线，详见 daylog设计.md）。
@@ -152,13 +151,6 @@ def _cmd_rebuild_all(a):
     print("rebuild-all -> %d 条索引（仓库根 %s）" % (n, mem.repo))
 
 
-def _cmd_tree(a):
-    """目录结构树生成已停用（派生缓存，等同 index.db，无需常驻）。"""
-    print("[tree] 目录结构树.md 生成已停用（见 SCHEMA 约定）")
-
-
-
-
 def build_parser():
     p = argparse.ArgumentParser(prog="hma.engine",
                                 description="HMA 通用引擎入口（内容即数据）")
@@ -216,11 +208,6 @@ def build_parser():
                     help="仓库根目录（含 index.db 的 memory，默认 memory）")
     ar.set_defaults(func=_cmd_rebuild_all)
 
-    t = sub.add_parser("tree",
-                        help="目录结构树生成已停用（派生缓存，等同 index.db）")
-    t.add_argument("--root", default="memory",
-                    help="仓库根目录（含 memory 的目录，默认 memory）")
-    t.set_defaults(func=_cmd_tree)
 
     return p
 

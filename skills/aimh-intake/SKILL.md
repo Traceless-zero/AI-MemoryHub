@@ -50,9 +50,7 @@ description: >
 判定后，**立刻加载**对应技能并**把它从头跑到尾**：
 
 - **类型 A → OC**：`oc-dossier`（store 分支）
-- **类型 B → User**：若为「跨项目画像 / HMA 设计偏好」这类**已结构化的稳定事实**，且来源正是 WB 的
-  `~/.workbuddy/MEMORY.md` 与项目 `.workbuddy/memory/MEMORY.md` → 跑 `scripts/core/build_user_package.py`
-  （确定性、幂等）；否则 → `aimh-ingest`，落 `用户/<子主题>/`，守 q-2 铁律（只放"用户自身"内容）。
+- **类型 B → User**：`aimh-ingest`，落 `用户/<子主题>/`，守 q-2 铁律（只放"用户自身"内容）。
 - **类型 C → 论文 / 资料**：`aimh-ingest`（文章/资料分支）
 - **类型 D → 零散文本 / 通用笔记**：`aimh-ingest`（通用分支）
 - **类型 E → 对话 / 会议 / 访谈**：`aimh-ingest`（对话记录分支）

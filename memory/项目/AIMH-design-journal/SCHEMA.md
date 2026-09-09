@@ -78,7 +78,7 @@ pkage_updated: 2026-09-09
 # AIMH 设计规范（落库与校验唯一真相源）
 
 > 本文件是 AIMH 所有 `memory/**` 事件包**写入与 lint 校验的唯一权威契约**。
-> 所有落库 skill（`aimh-ingest` / `oc-dossier` / `aimh-project` / `memory-import` / `aimh-recall` / `aimh-always`）与 `scripts/core/lint_memory.py` 都以本文件为准；**不再于各 skill 内嵌规则副本**（避免漂移）。
+> 所有落库 skill（`aimh-ingest` / `oc-dossier` / `aimh-project` / `aimh-recall` / `aimh-always`）与 `scripts/core/lint_memory.py` 都以本文件为准；**不再于各 skill 内嵌规则副本**（避免漂移）。
 > 字段语义 / 哲学推导 / 引擎实现细节见 design-journal 其余文档（见 §6 索引），本文件只写「现在必须怎么写、lint 怎么查」。
 > 与 Karpathy LLM Wiki 的 `AGENTS.md` 同构——但 AIMH 把它做成**软契约（本文件）＋ 硬约束（hma_core 引擎）＋ 校验兜底（lint_memory.py）**三层。
 

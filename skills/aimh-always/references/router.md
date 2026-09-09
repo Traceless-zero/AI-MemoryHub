@@ -14,7 +14,6 @@
 | 存**对话 / 会议 / 访谈记录**（逐字 + 拍板） | "把这场对话存一下""记一下刚才的会""收个会议记录" / 给 transcript | **`aimh-ingest`**（对话记录分支） |
 | 存 / 摘一个 **OC 角色**（文字或文件） | "把这个角色存下来""从书里摘个角色""整理成 OC 档案" | **`oc-dossier`**（store 分支） |
 | 对话中**叫到某 OC 名字**并像对其说话 | 出现已登记 OC 名字 + 像在对话 | **`oc-dossier`**（wake 分支） |
-| 导入 **AI 客户端原生记忆**（WB / Claude Code / Gemini / Codex） | "把 XX 记忆收进 HMA""导入 XX 工作日志" | **intake 召回键「客户端记忆迁移」**（migrate_* 适配器） |
 | **项目工程收录**（按 README 式拆包策略） | "把这个项目/模块收进记忆""按项目结构拆包" | **`aimh-project`** |
 | **归类纠错 / 移包 / 合并** | "移包 <目标>""合并 <已有包>""刚才归错了" | **intake 召回键「移包与合并」**（relocate_package.py） |
 | **检索 / 回忆**（不存） | "回忆 X""查一下 Z" / 问题依赖过往上下文 | 直接调引擎（见下方「检索路径」） |
@@ -38,16 +37,6 @@ python scripts/core/oc_registry.py find "<原话>"              # OC 名字 → 
 python scripts/core/oc_registry.py list
 ```
 
-## 路径路由（客户端原生记忆探测，交给迁移适配器（migrate_*_memory.py）前先收窄）
-
-| 探测信号 | 客户端 | 适配器 |
-|---|---|---|
-| cwd 在 `~/.claude/projects/<hash>/` 下，或存在 `memory/` AutoMemory | Claude Code | `scripts/core/migrate_claude_memory.py` |
-| 存在 `~/.gemini/GEMINI.md` | Gemini CLI | `scripts/core/migrate_gemini_memory.py` |
-| 存在 `~/.codex/memories/` | Codex | `scripts/core/migrate_codex_memory.py` |
-| 项目级存在 `.workbuddy/memory/2026-*.md` | WorkBuddy | `scripts/core/migrate_wb_memory.py` |
-
-> 判定拿不准就问用户"你这次想导哪个客户端的记忆？"。路径探测只做"收窄候选"，最终落库与索引全交给迁移适配器。
 
 ## 后台铁律（路由时务必遵守，源自 CEMA 设计）
 

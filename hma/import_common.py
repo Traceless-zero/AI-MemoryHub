@@ -9,7 +9,7 @@ R49 设计翻转：废弃 external/ 隔离命名空间，改为把原客户端�
   - 稳定 eid（由调用方给定，保证重跑幂等，不重复建行）
 
 架构分工（严格对齐 HMA 铁律「理解归 AI，落库归脚本」）：
-  - AI（memory-import 技能）判定客户端 + 把原生记忆切成逻辑条目 +
+  - AI（导入侧技能）判定来源 + 把原生记忆切成逻辑条目 +
     判定每条归哪个命名空间（User/项目/Other）+ 给定稳定 eid + 给溯源引用。
   - 本原语只做纯确定性写：拼包路径、加标签、追加溯源行、
     派生锚点、调 Memory.write，统一前台 db 自动接住。
@@ -81,7 +81,7 @@ def write_imported(memory_root, namespace, client, eid, title, body,
         created=created or today,
         updated=today,
         anchors=derive_anchors(full_body),
-        trigger="memory-import",
+        trigger="import",
     )
     mem.close()
     return pkg_root

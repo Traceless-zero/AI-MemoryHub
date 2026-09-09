@@ -13,6 +13,14 @@
 - **行尾教训第四次**：`git show HEAD:file | grep -c $'\r'` 判行尾不可靠（Git Bash 管道假象）——**必须字节级**（subprocess + bytes.count）。各文件原行尾实测：dispatch.py=LF、SCHEMA/什么是AIMH= CRLF、audit_orphans= CRLF，已逐一按原样恢复，真实 diff **7+/5-**。
 - **验收**：compileall OK；`python -m hma.engine modes` 冒烟 OK（note/oc_dossier/packs 注册正常）；全量 **25/25 GREEN**；audit_orphans 孤儿候选 **1**（_boundary_hit/_is_cjk 已删，_rare_entities/dispatch 转声明保留=5）。
 
+### 客户端记忆迁移能力退役（migrate_*_memory 四适配器 + 全部契约登记）
+
+- **删 4 脚本**：migrate_claude / codex / gemini / wb_memory（451 行）。**用 os.remove + git add -A，不用 `git rm hma/tree.py` 类命令**（该命令在此环境两次触发 hma/ 目录级消失，实锤）。
+- **契约同步退役（四处）**：①工具总览 export/import：§2.2 整节 + 锚点、表格 4 行、摘要、intake 派发目标、memory-import 技能条目；②questionset **T26** 契约测试（断言对象即 §2.2）随能力删除，用例数 28→27；③`aimh-always/router.md` 路由表条目 + 「路径路由（迁移适配器）」小节；④引擎侧 `import_entry` docstring 与 `import_common` 的 `trigger` 值中性化（"import"；该值仅作元信息标签，不落包不进索引）。
+- **保留**：`import_common.write_imported`（被 `compact.py` 活调用）、`import_entry` CLI（细粒度导入原语，配合 write_imported 使用）。
+- **权威包枚举句清理**：SCHEMA / 存储架构总览 去掉已不存在的 memory-import 技能（走 export/import；改动后跑全量确认无漂移——**权威包正文即 BM25 语料，改措辞必须回归验证**）。
+- **验收**：全量 **25/25 GREEN**；残留终扫 migrate_/memory-import 计数 0（用户数据.md 的事故记载与 daylog 历史除外，属记忆非登记）。
+
 ### 全库审查第二批：corpus_hit_rerank 连锁闭包清理 + _rare_entities 声明保留
 
 - **ast 闭包计算**：删 `_corpus_top_term_hit_files` / `_corpus_blob_candidates` / `_boundary_hit` / `_is_cjk` / `_clean_entities` / `_flat_variants_late` 六项零生产调用链，净 -203 行（retrieval 1948→1835）；`_entity_in_corpus` / `_entity_vocab` / `_blob_populated` / `_blob_ok` 有活调用者保留。

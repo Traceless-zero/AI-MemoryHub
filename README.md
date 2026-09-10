@@ -47,11 +47,11 @@ AIMH/
 │   ├── server.py               # MCP server（stdio JSON-RPC，11 工具）
 │   ├── engine/                # 分支接口 / CLI（dispatch + @register + handlers）
 │   ├── ingest.py              # AI 收录管线
-│   ├── daylog.py / tree.py / llm_adapter.py
-├── scripts/core/               # 独立确定性脚本（rebuild_index / new_package / relocate / migrate_*_memory / compact / deploy_mcp …）
+│   ├── daylog.py / llm_adapter.py
+├── scripts/core/               # 独立确定性脚本（rebuild_index / new_package / relocate / compact / deploy_mcp …）
 ├── skills/                      # 技能（项目级副本，与用户级 ~/.workbuddy/skills 双副本；含召回失败三层诊断 aimh-recall-diagnose）
 ├── memory/                      # 权威记忆库（单一真相）
-├── 一键更新记忆索引.exe          # 一键重建索引（rebuild_index.py 的 PyInstaller 打包，双击即用零 AI；旧版留存为「（已老旧）」文件）
+├── 一键更新记忆索引.exe          # 一键重建索引（rebuild_index.py 的 PyInstaller 打包，双击即用零 AI；引擎大改后需重新打包）
 ├── pyproject.toml               # 零运行时依赖声明
 ├── AGENTS.md                    # ZCode 工作区指南（指针式铁律 + 红线）
 └── README.md
@@ -154,7 +154,7 @@ echo "周会：放弃 RAG，改事件驱动；下周三前完成 MCP 评审。" 
 echo "随手记一条想法" | python -m hma.cli --root memory ingest --no-llm
 ```
 
-**零成本路径（Agent 即理解层）**：未配置 key 时，让当前会话 Agent 充当理解层（加载 `aimh-ingest` 技能），由确定性引擎落库——与付费 LLM 路径同构可替换。当文本类型不确定时，先加载 `aimh-intake` 元路由技能做分类决策，再链式加载 `oc-dossier` / `aimh-ingest` / `aimh-project` / `memory-import` 对应技能落库，自己不写任何 `memory/` 文件。
+**零成本路径（Agent 即理解层）**：未配置 key 时，让当前会话 Agent 充当理解层（加载 `aimh-ingest` 技能），由确定性引擎落库——与付费 LLM 路径同构可替换。当文本类型不确定时，先加载 `aimh-intake` 元路由技能做分类决策，再链式加载 `oc-dossier` / `aimh-ingest` / `aimh-project` 对应技能落库，自己不写任何 `memory/` 文件。
 
 **确定性落库 / 改包（`scripts/core/new_package.py`，推荐入口）**——记忆包全生命周期格式零手搓：
 
@@ -203,19 +203,6 @@ python scripts/core/compact.py \
 ```
 
 铁律：压缩 = **加法式冷摘要**，权威原文一字不动；仅当新信息与某权威事件**真正冲突**时才覆盖并追加可审计 trail。
-
-### 迁移外部记忆
-
-`scripts/core/` 下的 `migrate_wb_memory` / `migrate_claude_memory` / `migrate_gemini_memory` / `migrate_codex_memory` 把各 AI 客户端的原生长期记忆迁移进 AIMH，装上可检索的 CEMA 前台索引：
-
-```bash
-python scripts/core/migrate_wb_memory.py     --wb-dir ".workbuddy/memory" --root memory/项目/AIMH-design-journal
-python scripts/core/migrate_claude_memory.py  --root memory --namespace 其他
-python scripts/core/migrate_gemini_memory.py  --root memory --namespace 其他
-python scripts/core/migrate_codex_memory.py   --root memory --namespace 其他
-```
-
-> 迁移脚本完整清单与哲学见 **[`技术参考.md` §八](memory/项目/AIMH-design-journal/技术参考.md)**。
 
 ### 进阶检索（scope / 拒答 / 多问 / 枚举）
 

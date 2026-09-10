@@ -142,7 +142,7 @@ def _cmd_uninstall(a):
 
 
 def _cmd_rebuild_all(a):
-    """遍历仓库根下所有包，全量重建统一索引（不再生成目录结构树）。"""
+    """遍历仓库根下所有包，全量重建统一索引。"""
     mem = Memory(a.root)
     try:
         n = mem.rebuild_all()
@@ -203,7 +203,7 @@ def build_parser():
     au.set_defaults(func=_cmd_uninstall)
 
     ar = sub.add_parser("rebuild-all",
-                        help="遍历仓库根下所有包，全量重建统一索引（不再生成目录结构树）")
+                        help="遍历仓库根下所有包，全量重建统一索引")
     ar.add_argument("--root", default="memory",
                     help="仓库根目录（含 index.db 的 memory，默认 memory）")
     ar.set_defaults(func=_cmd_rebuild_all)

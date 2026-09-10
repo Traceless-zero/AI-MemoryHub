@@ -5,7 +5,7 @@
 stdlib only（http.server），零额外依赖。绑 127.0.0.1，不暴露局域网。
 
 接口：
-  GET /                -> 返回前端 HTML（同目录 目录结构树.html）
+  GET /                -> 返回前端 HTML（同目录 index.html）
   GET /api/tree        -> 整体结构树（命名空间->包->md，含 front-matter 摘要）
   GET /api/search?q=   -> 调 Memory.query_anchors 返回 top 锚点卡片
   GET /api/md?path=    -> 返回某 .md 的正文（用于结构树点开看）
@@ -27,7 +27,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 HERE = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(HERE, ".."))
 MEMORY_ROOT = os.path.join(PROJECT_ROOT, "memory")
-HTML_PATH = os.path.join(HERE, "目录结构树.html")
+HTML_PATH = os.path.join(HERE, "index.html")
 
 # 把项目根加进 sys.path 以便 import hma_core
 if PROJECT_ROOT not in sys.path:

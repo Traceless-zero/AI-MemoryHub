@@ -922,109 +922,10 @@ class RetrievalMixin:
             self._idf_df[t] = max(0.0, math.log((self._idf_N + 1) / (n + 1)))
         return self._idf_df[t]
 
-    def _bm25_corpus(self, pid):
-        """懒构建 BM25 语料统计（df / doc_len / N / avgdl），按 pid 过滤缓存。
 
-        仅扫描一次 `events`（与 query_anchors 同一过滤口径），之后复用；
-        每次检索调用不再重扫，热路径零额外扫描。
-        """
-        if getattr(self, "_bm25_cache", None) is None:
-            self._bm25_cache = {}
-        key = pid or ""
-        if key in self._bm25_cache:
-            return self._bm25_cache[key]
-        c = self._conn()
-        if pid:
-            rows = c.execute(
-                "SELECT filepath,title,anchors FROM events "
-                "WHERE package_id=? OR package_id LIKE ? || '/%'",
-                (pid, pid)).fetchall()
-        else:
-            rows = c.execute("SELECT filepath,title,anchors FROM events").fetchall()
-        pkg_tok = {}
-        doc_len = {}
-        for rid, title, aj in rows:
-            try:
-                anchors = json.loads(aj or "[]")
-            except Exception:
-                anchors = []
-            # 文档标题注入锚点可检索文本：标题是区分同名/同主题文档的最强判别信号。
-            # 仅索引锚点 Chapter/about/keywords+正文会导致「仅由标题区分」的文档（如
-            # 「召回消歧管线设计（实现）」）无法被标题词查询命中。标题在文档级拼接
-            # 一次（不随锚点数重复），避免权重被锚点数放大。
-            body = ((title or "") + "\n" + "\n".join(
-                self._anchor_body(rid, a) for a in anchors
-                if isinstance(a, dict))).lower()
-            toks = self._RERANK_TOK.findall(body)
-            pkg_tok[rid] = Counter(toks)
-            doc_len[rid] = len(toks)
-        N = len(pkg_tok)
-        df = Counter()
-        for ctr in pkg_tok.values():
-            for t in ctr:
-                df[t] += 1
-        avgdl = (sum(doc_len.values()) / N) if N else 1
-        stats = {
-            "pkg_tok": pkg_tok,
-            "doc_len": doc_len,
-            "df": df,
-            "N": N,
-            "avgdl": avgdl,
-            "pkg_set": {rid: set(ctr) for rid, ctr in pkg_tok.items()},
-        }
-        self._bm25_cache[key] = stats
-        return stats
-
-    def _rerank(self, scored, ql, pid):
-        """对已捞到的候选做确定性 BM25 重排（含词项覆盖奖励）。
-
-        scored: [(pkg_id, title, summary, locator, score), ...]
-        返回按 BM25+覆盖 降序重排后的列表（确定性 tie-break：包 id、标题）。
-        """
-        stats = self._bm25_corpus(pid)
-        qterms = self._RERANK_TOK.findall(ql.lower())
-        qset = set(qterms)
-        df = stats["df"]
-        N = stats["N"]
-        avgdl = stats["avgdl"]
-        pkg_tok = stats["pkg_tok"]
-        doc_len = stats["doc_len"]
-        pkg_set = stats["pkg_set"]
-
-        def score(entry):
-            rid = entry[0]
-            toks = pkg_tok.get(rid)
-            if not toks:
-                return float("-inf")
-            dl = doc_len.get(rid, 1) or 1
-            s = 0.0
-            for qt in qterms:
-                d = df.get(qt, 0)
-                if d == 0:
-                    continue
-                idf = math.log(1 + (N - d + 0.5) / (d + 0.5))
-                tf = toks[qt]
-                s += idf * (tf * (self._RERANK_K1 + 1)) / (
-                    tf + self._RERANK_K1 * (1 - self._RERANK_B +
-                                            self._RERANK_B * dl / avgdl))
-            cov = (len(qset & pkg_set.get(rid, set())) / len(qset)) if qset else 0.0
-            return s + self._RERANK_COV_W * cov
-
-        ranked = sorted(scored, key=lambda e: (-score(e), e[0], e[1]))
-
-        # dK 瀑布裁切（铁律·用户 2026-08-22 钉死）：75 = 相邻分差基准（CUTOFF_GAP_FLOOR）。
-        # 从 top1 往下扫，第一个 d_k > 75 处 -> top_{k+1} 及之后全部裁切、扫描立即终止；
-        # 全程 d_k <= 75 -> 全保留（同分簇/弱命中/纯噪声均属此）。非绝对分阈值、非逐段裁切。
-        # ★ 重要：本裁切的 d_k 取的是 `entries[k][4]` —— 即**锚点原始分**(_anchor_score 量级
-        # 150×n)，不是上面 score(e) 的 BM25 分。sorted 只重排顺序、不改元组内容，故裁切键
-        # 仍是原始锚点分（这正是铁律设计意图：75 针对锚点分制）。切勿误以为"作用在 BM25 分
-        # 上 75 过大永不触发"——那是分制误读（2026-08-24 复核实测：示例信物池 9→裁2、
-        # 尼采 17→6、存在主义 19→2，裁切真实且剧烈触发）。
-        # 裁切逻辑收编至 recall_obscure.waterfall_cut（与沙箱 dk 实验稿同源、单点维护）。
-        return ro.waterfall_cut(ranked, C.CUTOFF_GAP_FLOOR)
 
     def query_anchors(self, q, top_k=5, package_id=None, dedup_packages=False,
-                      idf=True, package_agg=False, rerank=False, reform=True,
+                      idf=True, package_agg=False, reform=True,
                       use_field_weights=True, use_features=False,
                       allow_abstain=False, kappa=None,
                       context=None, decomposer=None, keywords=None, scope=None):
@@ -1055,11 +956,6 @@ class RetrievalMixin:
         已天然每包一条）。默认关闭是为了保留「同包多锚点精准召回」
         （Demo/OC 类单包多锚点用法）；跨包广检索（LoCoMo bench）显式开启。
 
-        rerank=False（2026-08-27 起默认关）→ 若显式开启，在已捞到的候选上做一层
-        确定性 BM25 重排（无向量、可由正文重建）。⚠️ 当前实现是【包级】BM25
-        （按整文件建 token 桶，同包所有锚点共享同一分），非锚点级，对同包多锚点
-        无法按锚点正文重排。禁止再叠加保护/排序层（dK 裁切自带保 gold 语义，
-        多层冗余且冲突）。重开 rerank 前须先改成锚点级。
 
         use_field_weights=True（V1.x 起默认开）→ 在以上排序之后，再叠加一层理解层
         四要素软加权（person/time/location/topic 一等字段族 + 包级 tags；详见
@@ -1220,7 +1116,7 @@ class RetrievalMixin:
                 for a in anchors:
                     if not isinstance(a, dict):
                         continue
-                    # 文档标题注入锚点可检索文本（与 _bm25_corpus 同款）：让「仅由标题
+                    # 文档标题注入锚点可检索文本：让「仅由标题
                     # 区分」的文档能被标题词查询命中；仅影响打分用的 at，展示用锚点
                     # 标题（a.get("title"/"Chapter")）保持不变。
                     at = ((a.get("title") or a.get("Chapter") or "") + " " + doc_title_l).lower()
@@ -1265,7 +1161,7 @@ class RetrievalMixin:
                 if not anchors:
                     continue
                 dict_anchors = [a for a in anchors if isinstance(a, dict)]
-                # 文档标题注入虚拟块（与 _bm25_corpus / _score 同款）：使「仅由标题
+                # 文档标题注入虚拟块（与 _score 同款）：使「仅由标题
                 # 区分」的文档在包级聚合下也能被标题词查询命中。
                 cat = ((doc_title_l + " ") + " ".join(
                     (a.get("title") or a.get("Chapter") or "") for a in dict_anchors)).lower()
@@ -1294,9 +1190,6 @@ class RetrievalMixin:
                 seen.add(r[0])
                 uniq.append(r)
             scored = uniq
-        if rerank:
-            rerank_sorted = self._rerank(scored, ql, pid)
-            scored = rerank_sorted[:top_k]
         if use_field_weights:
             scored = self._apply_field_weights(
                 scored, q, terms, route_target=(route_pid if route_conf else None))
@@ -1320,7 +1213,7 @@ class RetrievalMixin:
         return [_stemify(r) for r in scored[:top_k]]
 
     def _apply_field_weights(self, scored, q, terms, route_target=None):
-        """理解层四要素软加权 + 查询→包路由（post-retrieval rerank，零 ML）。
+        """理解层四要素软加权 + 查询→包路由（检索后重排，零 ML）。
 
         对每条候选按「命中的结构化要素数」加权（时间/地点/人物/主题四要素 +
         包级 tags），命中越多越靠前，但**本函数内不剔除任何候选**——只调序。语义是

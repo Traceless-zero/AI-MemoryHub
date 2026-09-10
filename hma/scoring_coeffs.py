@@ -84,10 +84,6 @@ FIELD_NUDGE = BASE_UNIT * 0.02    # =BASE_UNIT×0.02（比例派生；BASE=150�
 FIELD_CAP = 0.3                   # 字段贡献封顶比例（不变）
 FIELD_ROUTE_BONUS = BASE_UNIT     # =BASE_UNIT（比例派生；BASE=150→150）
 
-# D. BM25 rerank 参数（IR 标准饱和函数，非次数加分，保留不动）
-RERANK_K1 = 1.5
-RERANK_B = 0.75
-RERANK_COV_W = 6.0
 
 # E. 关键词覆盖度布尔奖励（派生：命中≥1 真实词即一次性 +BASE_UNIT×2）
 KW_FIXED = BASE_UNIT * 2.0        # =BASE_UNIT×2（覆盖度布尔奖励；BASE=150→300）

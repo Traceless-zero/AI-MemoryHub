@@ -548,14 +548,9 @@ class Memory(_MechanicalLayer, WriteMixin, RetrievalMixin):
         self._idf_df = {}
         self._idf_N = len(docs)
 
-    # ---- 确定性 BM25 重排（query_anchors 的 rerank=True 模式）---------------
     # 无向量、可由正文重建，对应 HMA 理解层/L2 的排序职责。
     # 实测把 hit@5 从 89.7% 提到 ~92%、hit@1 从 60% 提到 ~72%
     # （LoCoMo 1982 题，reform+idf+pkgagg 配置下）。
-    _RERANK_TOK = re.compile(r"[A-Za-z0-9]+|[一-鿿]")
-    _RERANK_K1 = C.RERANK_K1
-    _RERANK_B = C.RERANK_B
-    _RERANK_COV_W = C.RERANK_COV_W
 
     def _kw_index(self):
         """结构性关键词→包索引（关键词补齐用），从 DB 各包锚点 keywords 派生。
@@ -627,7 +622,7 @@ class Memory(_MechanicalLayer, WriteMixin, RetrievalMixin):
         """Gate2：查询解析出已知四要素实体，但召回包「四要素 + 正文」零命中 → 越界拒答。
 
         忠实落地用户设计的「基准真机制=四要素字段缩圈」：当前 query_anchors
-        只把四要素当 rerank 裁判（_apply_field_weights），从不缩圈；此闸让越界
+        只把四要素当重排裁判（_apply_field_weights），从不缩圈；此闸让越界
         查询真正被拒。零 ML（对全库实体词表做字典命中）。未知实体（不在词表）
         则交 Gate1 覆盖度判定（即用户设计的「topic 未规范则缩圈静默漏」边界）。
 

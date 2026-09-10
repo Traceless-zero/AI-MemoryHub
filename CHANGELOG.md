@@ -6,6 +6,13 @@
 
 ## 2026-09-08
 
+### BM25 重排装置退役（死装置：默认关 2 年 + 生产零调用 + 包级粒度错配）
+
+- **删**：`_rerank`（47 行）/ `_bm25_corpus`（52 行）/ `query_anchors(rerank=...)` 参数与调用分支 / `_RERANK_TOK·K1·B·COV_W` 四常量（hma_core）/ `RERANK_K1·B·COV_W` 三常量（scoring_coeffs）——共 **-123 行**。
+- **清悬空注释 8 处**：hma_core 分节注释与"rerank 裁判"用词、recall_obscure 两处 `_rerank` 引用、scoring_coeffs 小节标题、retrieval 两处"_bm25_corpus 同款"、docstring 的 post-retrieval rerank 用词。
+- **判据**：2026-08-27 起默认关闭；唯一入口被 `if rerank:` 挡住且全仓无一处传 True；用户判定"冗余且引入 bug"；实现是包级 BM25 而主路径是锚点级（粒度错配）。其收益（TF 饱和 / IDF 加权 / 多词覆盖）已分别由字段加权、`_idf()` 去地板变体、覆盖度饱和覆盖。
+- **验收**：全量 **25/25 GREEN**；`hma/` 内 rerank/bm25/RERANK 残留计数 **0**。
+
 ### 全库审查第三批：#6 权威包 REFINE 措辞精度 + #7 engine 派发入口澄清
 
 - **#6 权威包对账（2 处措辞精度）**：`SCHEMA.md` / `什么是AIMH系统.md` 的"REFINE/LLM 常识桥接未接入引擎"易被误读为 refine 模块整体未接——实际 refine.py 的**机械兜底拒答闸**（`corpus_overlap_absent`）已接入引擎两处消费（机械兜底路径 + MCP 主路径 ABSTAIN），语义桥接归 AI 理解层。两句改写为"REFINE 语义桥接归 AI 理解层，引擎侧仅保留机械兜底拒答闸"。走 export/import 流程 + rebuild。

@@ -7,7 +7,7 @@ AIMH 召回机械层（recall_obscure）—— 沙箱实验稿 consolidation。
   · sandbox_dk_base_half.py      —— dK 裁切基准 = BASE_UNIT×0.5 联动验证（设计稿，派生式未采用）
   · sandbox_dk_cutoff_compare.py —— CUTOFF_GAP_FLOOR 50 vs 75 真实 hit@5 对比（已跑，选 75）
 
-本模块是零依赖确定性机械层（re / math），被 hma_core 的 obscure_recall 与 _rerank 调用，
+本模块是零依赖确定性机械层（re / math），被 hma_core 的 obscure_recall 调用，
 消除「沙箱原型逻辑被生产内联重复」的漂移风险——改一处即全链路一致。
 
 铁律（上下文）：
@@ -123,7 +123,7 @@ def chapter_slice(body, chapter_title, start, end):
 
 
 
-# ---------- dK 瀑布裁切（与 hma_core._rerank 内联版行为一致） ----------
+# ---------- dK 瀑布裁切（与召回侧内联版行为一致） ----------
 def waterfall_cut(entries, floor):
     """entries[k][4] = 锚点原始分（_anchor_score 量级）；相邻 d_k > floor 处单向裁切、
     返回 entries[:k+1]，全程 d_k <= floor 返回全表。非绝对分阈值、非逐段裁切。"""
